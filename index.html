@@ -842,15 +842,7 @@ async function loadState() {
 }
 
 // Wait for Firebase module to load
-if(window._firebaseReady){ fbReady=true; loadState(); }
-else { document.addEventListener('firebaseReady',()=>{ fbReady=true; loadState(); });
-  setTimeout(()=>{
-    if(!fbReady){
-      console.warn('Firebase not ready, loading from localStorage');
-      loadState();
-      setSyncStatus('error','Firebase connecting... · Firebase 연결 중 (로컬 데이터 사용)');
-    }
-  }, 6000); }
+// Firebase init handled by _onFirebaseReady callback below
 
 // ═══════════════════════════════════════════
 // HELPERS
@@ -1264,6 +1256,34 @@ function printPDF(id){
   pdf.save(`${doc.docNo||'doc'}_${(doc.title||'').replace(/[^a-zA-Z0-9가-힣]/g,'_').substring(0,24)}.pdf`);showToast('PDF saved · PDF 저장 완료');
 }
 </script>
+
+// ═══════════════════════════════════════════
+// FIREBASE INIT — single clean entry point
+// ═══════════════════════════════════════════
+window._onFirebaseReady = function() {
+  fbReady = true;
+  loadState();
+};
+
+// Case 1: Firebase module already ran before this script
+if (window._firebaseReady) {
+  fbReady = true;
+  loadState();
+} else {
+  // Case 2: Firebase module runs after — listen for event
+  document.addEventListener('firebaseReady', function() {
+    fbReady = true;
+    loadState();
+  }, { once: true });
+
+  // Case 3: Firebase never loads (network block, ad blocker etc)
+  setTimeout(function() {
+    if (!fbReady) {
+      console.warn('Firebase unavailable — using localStorage fallback');
+      loadState();
+    }
+  }, 10000);
+}
 
 <script>
 // ═══════════════════════════════════════════
