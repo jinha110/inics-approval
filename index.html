@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -16,64 +15,68 @@
      아래 7개 값을 Firebase Console에서 복사해서 교체하세요
      Replace the 7 values below with your Firebase project config
      ════════════════════════════════════════════════ -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-const firebaseConfig = {
-  apiKey:            "AIzaSyDU8DTaqZuG1CZTO6TJprqq7NV9WrAjzio",
-  authDomain:        "inics-approval.firebaseapp.com",
-  databaseURL:       "https://inics-approval-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "inics-approval",
-  storageBucket:     "inics-approval.firebasestorage.app",
-  messagingSenderId: "54538003603",
-  appId:             "1:54538003603:web:2bea49acefa466bf785966"
-};
-
-try {
-  const app = initializeApp(firebaseConfig);
-  const db  = getDatabase(app);
-  const DB_PATH = "inics_approval/state";
+<script>
+(function() {
+  var BASE = "https://inics-approval-default-rtdb.asia-southeast1.firebasedatabase.app";
+  var PATH = "/inics_approval/state.json";
 
   window._fbSave = async function(state) {
+    // Always save to localStorage as backup
+    try { localStorage.setItem("inics_local", JSON.stringify(state)); } catch(_){}
     try {
-      await set(ref(db, DB_PATH), state);
+      var r = await fetch(BASE + PATH, {
+        method: "PUT",
+        mode: "cors",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(state)
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      setSyncStatus('ok','Synced · 동기화 완료');
     } catch(e) {
       console.error("Firebase save error:", e);
-      try { localStorage.setItem("inics_local", JSON.stringify(state)); } catch(_){}
+      setSyncStatus('ok','Local mode · 로컬 저장');
     }
   };
 
   window._fbLoad = async function() {
     try {
-      const snap = await get(ref(db, DB_PATH));
-      if (snap.exists()) return snap.val();
-      return null;
+      var r = await fetch(BASE + PATH, {mode:'cors', cache:'no-cache'});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      var data = await r.json();
+      setSyncStatus('ok','Live sync · 실시간 동기화');
+      return data;
     } catch(e) {
       console.error("Firebase load error:", e);
+      // Try localStorage fallback
+      try {
+        var s = localStorage.getItem('inics_local');
+        if(s) { setSyncStatus('ok','Local mode · 로컬 모드'); return JSON.parse(s); }
+      } catch(_){}
       return null;
     }
   };
 
   window._fbListen = function(cb) {
-    onValue(ref(db, DB_PATH), snap => {
-      if (snap.exists()) cb(snap.val());
-    });
+    setInterval(async function() {
+      try {
+        var r = await fetch(BASE + PATH, {mode:'cors', cache:'no-cache'});
+        if (r.ok) {
+          var d = await r.json();
+          if (d && d.docs) cb(d);
+        }
+      } catch(e) {}
+    }, 5000);
   };
 
   window._firebaseReady = true;
+  window._fbInitDone = true;
 
-  // Directly call loadState if it's already defined, otherwise dispatch event
   if (typeof window._onFirebaseReady === 'function') {
     window._onFirebaseReady();
   } else {
     document.dispatchEvent(new Event("firebaseReady"));
   }
-
-} catch(e) {
-  console.error("Firebase init error:", e);
-  document.dispatchEvent(new Event("firebaseReady"));
-}
+})();
 </script>
 
 <style>
@@ -160,7 +163,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 /* DETAIL */
 .detail-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:10px;overflow:hidden}
 .detail-hdr{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.detail-title{font-size:15px;font-weight:600;margin-bottom:5px}
+.detail-title{font-size:16px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
 .detail-badges{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
 .detail-body{padding:18px}
 
@@ -205,7 +208,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .att-size{font-size:10px;color:var(--text-3);font-family:var(--mono)}
 .att-del{background:none;border:none;cursor:pointer;color:var(--text-3);padding:2px;border-radius:4px;display:flex;align-items:center}
 .att-del:hover{color:var(--danger);background:var(--danger-bg)}
-.cnt-badge{background:#dbeafe;color:#1d4ed8;font-size:10px;padding:1px 7px;border-radius:20px;font-weight:600}
+.cnt-badge{background:var(--surface-2);color:#1d4ed8;font-size:10px;padding:1px 7px;border-radius:20px;font-weight:600}
 .upload-zone{border:1px dashed var(--border-strong);border-radius:var(--radius);padding:14px;text-align:center;cursor:pointer;color:var(--text-3);font-size:12px;transition:border-color .1s,background .1s}
 .upload-zone:hover{border-color:var(--text-2);background:var(--surface-2)}
 
@@ -232,8 +235,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--text)}
 .fg textarea{resize:vertical;min-height:68px}
 .currency-row{display:grid;grid-template-columns:90px 1fr;gap:10px}
-.radio-row{display:flex;gap:14px;margin-top:4px}
-.radio-label{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer}
+.radio-row{display:flex;gap:14px;margin-top:4px;flex-wrap:nowrap;align-items:center}
+.radio-label{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap}
 .line-preview{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 13px;font-size:12px;color:var(--text-2);margin-top:8px}
 
 /* ACTION */
@@ -292,6 +295,16 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .info-grid,.fgrid,.admin-grid{grid-template-columns:1fr}
   .span2{grid-column:span 1}
+  #dashGrid{grid-template-columns:1fr !important}
+  .doc-row{padding:12px 14px}
+  .filter-bar{gap:4px}
+  .filter-chip{padding:4px 9px;font-size:10px}
+  .content{padding:14px}
+  .topbar{padding:0 14px}
+  .detail-body{padding:14px}
+  .flow-track{gap:3px}
+  .fnode{min-width:44px}
+  .flabel{font-size:8px;max-width:44px}
 }
 
 /* ── LOGIN GATE ── */
@@ -345,6 +358,119 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .login-btn:hover { opacity: .85; }
 .login-footer { font-size: 10px; color: #9a9a92; text-align: center; margin-top: 16px; }
 
+
+/* ── PROFILE PHOTOS ── */
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  object-fit: cover; border: 1.5px solid var(--border);
+  background: var(--surface-2); flex-shrink: 0;
+}
+.avatar-lg {
+  width: 48px; height: 48px; border-radius: 50%;
+  object-fit: cover; border: 2px solid var(--border);
+  background: var(--surface-2);
+}
+.avatar-placeholder {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--text-3);
+  background: var(--surface-2); border-radius: 50%;
+}
+.photo-upload-btn {
+  position: relative; cursor: pointer; display: inline-flex;
+  align-items: center; justify-content: center;
+}
+.photo-upload-btn input { display: none; }
+.photo-upload-overlay {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(0,0,0,.45); display: none;
+  align-items: center; justify-content: center;
+  color: white; font-size: 13px;
+}
+.photo-upload-btn:hover .photo-upload-overlay { display: flex; }
+
+
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.3);
+  z-index: 99;
+}
+@media(max-width:768px) {
+  .sidebar.open ~ .main-wrap::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.3);
+    z-index: 99;
+  }
+}
+
+
+/* ── HUB PAGE ── */
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-top: 24px;
+}
+.hub-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px 24px;
+  cursor: pointer;
+  transition: all .15s;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.hub-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 20px rgba(0,0,0,.07);
+  transform: translateY(-2px);
+}
+.hub-card.active-module {
+  border-color: #93c5fd;
+  background: #f0f7ff;
+}
+.hub-card.coming-soon {
+  opacity: .6;
+  cursor: default;
+}
+.hub-card-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  margin: 0 auto 14px;
+}
+.hub-card-title {
+  font-size: 15px; font-weight: 600;
+  margin-bottom: 6px; color: var(--text);
+}
+.hub-card-desc {
+  font-size: 12px; color: var(--text-3);
+  line-height: 1.5;
+}
+.hub-card-badge {
+  position: absolute; top: 12px; right: 12px;
+  font-size: 9px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px;
+}
+.hub-welcome {
+  text-align: center; padding: 32px 0 8px;
+}
+.hub-welcome-title {
+  font-size: 22px; font-weight: 700;
+  letter-spacing: -.02em; margin-bottom: 6px;
+}
+.hub-welcome-sub {
+  font-size: 13px; color: var(--text-3);
+}
+@media(max-width:768px){
+  .hub-grid { grid-template-columns: 1fr; gap: 12px; }
+  .hub-card { padding: 22px 18px; }
+}
+
 </style>
 </head>
 <body>
@@ -369,10 +495,76 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 </div>
 
 
+<!-- HUB PAGE (shows before entering a module) -->
+<div id="hubPage" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;overflow-y:auto">
+  <div style="max-width:900px;margin:0 auto;padding:40px 24px">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:18px;font-weight:700;letter-spacing:-.02em">INICS VINA</div>
+      <div id="hubUserChip" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2)">
+        <span id="hubAvatarChip"></span>
+        <span id="hubUserName"></span>
+        <button class="btn btn-outline" onclick="hubLogout()" style="padding:4px 9px;font-size:11px"><i class="ti ti-logout"></i> Sign out</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:36px">INICS Vietnam Business Management System · INICS 베트남 업무 관리 시스템</div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px">Modules · 모듈 선택 — Click to enter · 클릭하여 진입</div>
+
+    <div class="hub-grid">
+
+      <!-- 전자결재 Electronic Approval -->
+      <div class="hub-card active-module" onclick="enterModule('approval')">
+        <div class="hub-card-badge" style="background:var(--surface-2);color:#1d4ed8">Active</div>
+        <div class="hub-card-icon" style="background:#eff6ff;color:#1d4ed8">
+          <i class="ti ti-file-check"></i>
+        </div>
+        <div class="hub-card-title">전자결재 · Electronic Approval</div>
+        <div class="hub-card-desc">기안 · 승인 · 결제<br>Draft · Approve · Payment</div>
+        <div id="hubApprovalBadge" style="display:none;margin-top:10px">
+          <span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px"></span>
+        </div>
+      </div>
+
+      <!-- 거래처 DB Vendor Database -->
+      <div class="hub-card active-module" onclick="enterModule('vendors')">
+        <div class="hub-card-badge" style="background:var(--surface-2);color:#1d4ed8">Active</div>
+        <div class="hub-card-icon" style="background:#f0fdf4;color:#15803d">
+          <i class="ti ti-building-store"></i>
+        </div>
+        <div class="hub-card-title">거래처 DB · Vendor Database</div>
+        <div class="hub-card-desc">거래처 · 은행정보 · 문서 검색<br>Vendor · Bank Info · Search</div>
+      </div>
+
+      <!-- 업무보고 Work Report -->
+      <div class="hub-card coming-soon">
+        <div class="hub-card-badge" style="background:var(--surface-2);color:var(--text-3)">Coming Soon</div>
+        <div class="hub-card-icon" style="background:#f0fdf4;color:#15803d">
+          <i class="ti ti-report"></i>
+        </div>
+        <div class="hub-card-title">업무보고 · Work Report</div>
+        <div class="hub-card-desc">일일 · 주간 · 월간 보고<br>Daily · Weekly · Monthly</div>
+      </div>
+
+      <!-- 카드사용 Card Usage -->
+      <div class="hub-card coming-soon">
+        <div class="hub-card-badge" style="background:var(--surface-2);color:var(--text-3)">Coming Soon</div>
+        <div class="hub-card-icon" style="background:#fef3c7;color:#92400e">
+          <i class="ti ti-credit-card"></i>
+        </div>
+        <div class="hub-card-title">카드사용 · Card Usage</div>
+        <div class="hub-card-desc">법인카드 지출 관리<br>Corporate Card Management</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- SIDEBAR -->
-<aside class="sidebar" id="sidebar">
+<aside class="sidebar"
+ id="sidebar">
   <div class="sidebar-logo">
-    <div class="logo-text">INICS</div>
+    <div class="logo-text" onclick="showHub()" style="cursor:pointer;display:flex;align-items:center;gap:7px"><i class="ti ti-home-2" style="font-size:16px;color:var(--text-3)"></i>INICS VINA</div>
     <div class="logo-sub">Electronic Approval · 전자결재 시스템<br>FURNITURE &amp; SOURCING</div>
   </div>
   <nav class="sidebar-nav">
@@ -391,11 +583,12 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 
     <div class="sidebar-section">Admin · 관리자</div>
     <button class="nav-item" id="nav-admin" onclick="showPage('admin')" style="display:none"><i class="ti ti-shield-check"></i>Admin Panel · 관리자 패널</button>
+    <button class="nav-item" onclick="showPage('vendors')"><i class="ti ti-building-store"></i>Vendors · 거래처 DB</button>
     <button class="nav-item" onclick="showAdminLogin()"><i class="ti ti-lock"></i>Admin Login · 관리자 로그인</button>
   </nav>
   <div class="sidebar-footer">
     v6.0 · Firebase Realtime DB<br>
-    <span id="syncStatusText" style="font-family:var(--mono);font-size:9px">Connecting · 연결 중...</span>
+    <span id="syncStatusText" style="font-family:var(--mono);font-size:9px">Online · 연결됨</span>
   </div>
 </aside>
 
@@ -403,11 +596,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 <div class="main-wrap">
   <header class="topbar">
     <div style="display:flex;align-items:center;gap:8px">
+      <button id="menuBtn" class="btn btn-outline" onclick="toggleSidebar()" style="padding:6px 9px;display:none"><i class="ti ti-menu-2"></i></button>
+      <button class="btn btn-outline" onclick="showHub()" style="padding:5px 10px;font-size:11px;gap:4px" title="Back to Main · 메인으로"><i class="ti ti-layout-grid"></i> Main · 메인</button>
       <div class="page-title" id="pageTitle">Dashboard · 대시보드</div>
     </div>
     <div class="topbar-right">
       <div id="sessionChip" style="display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-2)">
-        <i class="ti ti-user-check" style="color:var(--success)"></i>
+        <span id="sessionAvatarChip"></span>
         <span id="sessionName"></span>
         <span id="sessionAdminBadge" class="badge b-admin" style="display:none">Admin · 관리자</span>
         <button class="btn btn-outline" onclick="globalLogout()" style="padding:4px 9px;font-size:11px"><i class="ti ti-logout"></i> Sign out</button>
@@ -419,12 +614,12 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
-      <div id="syncBar" class="sync-bar offline" style="margin-bottom:16px">
-        <i class="ti ti-cloud-off"></i>
-        <span id="syncMsg">Connecting to Firebase · Firebase 연결 중...</span>
+      <div id="syncBar" class="sync-bar" style="margin-bottom:16px">
+        <i class="ti ti-cloud-check"></i>
+        <span id="syncMsg">Connected · Firebase 연결됨</span>
       </div>
       <div class="stats-grid" id="dashStats"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div id="dashGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
           <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px">Pending · 승인 대기</div>
           <div id="dashPending"></div>
@@ -503,17 +698,28 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
         <div class="form-card">
           <div class="form-card-title"><i class="ti ti-file-description"></i> Document Info · 문서 정보</div>
           <div class="fgrid">
-            <div class="fg"><label>Department · 소속 <span>(결재선 자동)</span></label><select id="docDept" onchange="onDeptChange()"><option value="FURNITURE">FURNITURE</option><option value="SOURCING">SOURCING</option></select></div>
-            <div class="fg"><label>Type · 유형</label><select id="docType" onchange="toggleExpenseDetail()"><option>지출결의서 · Expense Report</option><option>구매요청서 · Purchase Request</option><option>휴가신청서 · Leave Request</option><option>업무보고서 · Work Report</option><option>기타 · Other</option></select></div>
-            <div class="fg span2"><label>Title · 제목</label><input type="text" id="docTitle" placeholder="Enter title · 결재 제목 입력"></div>
+            <div class="fg"><label>Department · 소속 <span>(결재선 자동)</span></label><select id="docDept" onchange="onDeptChange()"></select></div>
+            <div class="fg"><label>Type · 유형</label><select id="docType" onchange="toggleExpenseDetail()"></select></div>
+            <div class="fg span2"><label>Title · 제목</label><input type="text" id="docTitle" placeholder="[Contents / Provider] Detail   ·   예: [의자 구매 / Fursys] 회의실 의자 20EA"></div>
             <div class="fg span2">
               <label>Currency &amp; Amount · 화폐 &amp; 금액 <span>(optional · 선택)</span></label>
               <div class="currency-row">
-                <div class="fg"><label style="font-size:10px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-3)">화폐 · Currency</label><select id="docCurrency"><option value="USD">USD</option><option value="VND">VND</option></select></div>
-                <div class="fg"><label style="font-size:10px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-3)">금액 · Amount</label><input type="text" id="docAmount" placeholder="예: 5,000,000"></div>
+                <div class="fg"><label style="font-size:10px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-3)">화폐 · Currency</label><select id="docCurrency"><option value="VND">VND</option><option value="USD">USD</option></select></div>
+                <div class="fg"><label style="font-size:10px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-3)">금액 · Amount</label><input type="text" id="docAmount" placeholder="예: 5,000,000" oninput="fmtAmountInput(this)"></div>
               </div>
             </div>
-            <div class="fg span2"><label>Description · 내용/사유</label><textarea id="docContent" placeholder="Enter details · 결재 내용 및 사유"></textarea></div>
+            <div class="fg span2">
+  <label>Description · 내용/사유</label>
+  <textarea id="docContent" placeholder="Enter details · 결재 내용 및 사유" style="min-height:200px"></textarea>
+  <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+    <label style="font-size:11px;color:var(--text-3);font-weight:400;text-transform:none;cursor:pointer;display:flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;background:var(--surface)">
+      <i class="ti ti-photo" style="font-size:14px;color:#3b82f6"></i> Add image · 이미지 첨부
+      <input type="file" id="descImageInput" accept="image/*" style="display:none" onchange="handleDescImage(event)">
+    </label>
+    <span id="descImageName" style="font-size:11px;color:var(--text-3)"></span>
+  </div>
+  <div id="descImagePreview" style="margin-top:8px"></div>
+</div>
 
             <!-- ── EXPENSE DETAIL (지출결의서 only) ── -->
             <div id="expenseDetail" class="span2" style="display:none">
@@ -525,12 +731,25 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
                 </div>
                 <div class="fgrid" style="padding:14px;gap:11px">
                   <div class="fg">
-                    <label>Vendor Name · 업체명</label>
-                    <input type="text" id="expVendorName" placeholder="업체명 입력">
+                    <label>Vendor Name · 업체명 <span style="color:var(--text-3);font-weight:400">— Search · 검색·유사검색</span></label>
+                    <div style="position:relative">
+                      <input type="text" id="expVendorName" placeholder="업체명 입력 또는 기존 거래처 검색 · type to search" autocomplete="off"
+                        oninput="onVendorInput(this.value)" onfocus="onVendorInput(this.value)"
+                        onkeydown="onVendorKeydown(event)" onblur="setTimeout(hideVendorSuggest,180)"
+                        onchange="onVendorPick(this.value)">
+                      <div id="vendorSuggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:50;background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.13);max-height:240px;overflow-y:auto;margin-top:3px"></div>
+                    </div>
+                    <div id="vendorPickHint" style="font-size:10px;color:var(--text-3);margin-top:3px">기존 거래처 선택 시 사업자번호 · 은행정보 자동입력 · Select existing vendor to auto-fill</div>
                   </div>
                   <div class="fg">
                     <label>Business Reg. No · 사업자등록번호</label>
                     <input type="text" id="expVendorReg" placeholder="예: 0123456789">
+                  </div>
+                  <div class="fg span2" id="vendorActionRow" style="display:none;flex-direction:row;gap:8px;align-items:center;flex-wrap:wrap">
+                    <button type="button" id="vendorAddBtn" class="btn btn-dark" style="display:none;font-size:11px;padding:5px 11px" onclick="addVendorFromDraft()"><i class="ti ti-plus"></i> 거래처 추가 · Add vendor</button>
+                    <button type="button" id="vendorReqBtn" class="btn btn-outline" style="display:none;font-size:11px;padding:5px 11px" onclick="requestVendorChange()"><i class="ti ti-lock-open"></i> 은행정보 변경 요청 · Request change</button>
+                    <button type="button" id="vendorReqSubmit" class="btn btn-dark" style="display:none;font-size:11px;padding:5px 11px" onclick="submitVendorChange()"><i class="ti ti-send"></i> 변경 요청 제출 · Submit</button>
+                    <button type="button" id="vendorReqCancel" class="btn btn-outline" style="display:none;font-size:11px;padding:5px 11px" onclick="cancelVendorChange()">취소 · Cancel</button>
                   </div>
                 </div>
 
@@ -654,13 +873,6 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
                     <textarea id="expVendorReason" placeholder="해당 업체를 선정한 이유를 입력하세요" style="min-height:60px"></textarea>
                   </div>
                   <div class="fg">
-                    <label>Budget Reflected · 예산 반영 여부</label>
-                    <div class="radio-row" style="margin-top:6px">
-                      <label class="radio-label"><input type="radio" name="expBudget" value="yes"> Yes · 예</label>
-                      <label class="radio-label"><input type="radio" name="expBudget" value="no" checked> No · 아니오</label>
-                    </div>
-                  </div>
-                  <div class="fg">
                     <label>Remarks · 기타</label>
                     <textarea id="expRemarks" placeholder="기타 사항 입력 (선택)" style="min-height:60px"></textarea>
                   </div>
@@ -690,6 +902,17 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
           <button class="btn btn-dark" onclick="submitDoc()"><i class="ti ti-send"></i> Submit · 결재 상신</button>
         </div>
       </div>
+    </div>
+
+    <!-- VENDOR DB PAGE -->
+    <div class="page" id="page-vendors">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-size:14px;font-weight:600">Vendors · 거래처 DB</div>
+        <div class="fg" style="max-width:260px">
+          <input type="text" id="vendorSearch" placeholder="Search · 검색..." oninput="renderVendorDB()" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--sans);outline:none;width:100%">
+        </div>
+      </div>
+      <div id="vendorDBList"></div>
     </div>
 
     <!-- ADMIN PAGE -->
@@ -723,10 +946,63 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
               <button class="btn btn-admin" onclick="changePassword()"><i class="ti ti-check"></i> Save · 저장</button>
             </div>
           </div>
+          <!-- Add Member -->
+          <div class="admin-card">
+            <div class="admin-card-hdr"><i class="ti ti-user-plus"></i> Add Member · 구성원 추가</div>
+            <div class="admin-card-body">
+              <div class="fg" style="margin-bottom:8px"><label>Name · 이름</label><input type="text" id="newMemberName" placeholder="e.g. JOHN LEE"></div>
+              <div class="fg" style="margin-bottom:8px"><label>ID · 아이디 (login)</label><input type="text" id="newMemberId" placeholder="e.g. JOHNLEE"></div>
+              <div class="fg" style="margin-bottom:8px"><label>Password · 비밀번호</label><input type="text" id="newMemberPw" placeholder="Initial password"></div>
+              <div class="fg" style="margin-bottom:8px"><label>Role · 직책</label><input type="text" id="newMemberRole" placeholder="e.g. MANAGER"></div>
+              <div class="fg" style="margin-bottom:10px"><label>Department · 부서</label><select id="newMemberDept"></select></div>
+              <div style="display:flex;gap:7px">
+                <button class="btn btn-dark" onclick="addMember()" style="flex:1"><i class="ti ti-user-plus"></i> Add · 추가</button>
+              </div>
+              <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+                <div style="font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;margin-bottom:6px">Remove Member · 구성원 삭제</div>
+                <div style="display:flex;gap:7px">
+                  <select id="removeMemberWho" style="flex:1;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--sans);outline:none"></select>
+                  <button class="btn btn-danger" onclick="removeMember()"><i class="ti ti-trash"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
           <!-- Stats -->
           <div class="admin-card">
             <div class="admin-card-hdr"><i class="ti ti-chart-bar"></i> Document Stats · 문서 통계</div>
             <div class="admin-card-body" id="adminStats"></div>
+          </div>
+          <!-- Dept Management -->
+          <div class="admin-card">
+            <div class="admin-card-hdr"><i class="ti ti-building"></i> Departments · 소속 관리</div>
+            <div class="admin-card-body">
+              <div id="adminDeptList" style="margin-bottom:10px"></div>
+              <div style="display:flex;gap:6px">
+                <input type="text" id="newDeptInput" placeholder="New dept · 소속명" style="flex:1;font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--sans);outline:none">
+                <button class="btn btn-dark" onclick="addDept()" style="padding:6px 12px"><i class="ti ti-plus"></i></button>
+              </div>
+            </div>
+          </div>
+          <!-- Type Management -->
+          <div class="admin-card">
+            <div class="admin-card-hdr"><i class="ti ti-file-text"></i> Document Types · 문서 유형 관리</div>
+            <div class="admin-card-body">
+              <div id="adminTypeList" style="margin-bottom:10px"></div>
+              <div style="display:flex;gap:6px">
+                <input type="text" id="newTypeInput" placeholder="New type · 유형명" style="flex:1;font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--sans);outline:none">
+                <button class="btn btn-dark" onclick="addDocType()" style="padding:6px 12px"><i class="ti ti-plus"></i></button>
+              </div>
+            </div>
+          </div>
+          <!-- Vendor Change Requests -->
+          <div class="admin-card">
+            <div class="admin-card-hdr"><i class="ti ti-clipboard-check"></i> Vendor Change Requests · 거래처 변경 요청 <span id="adminVendorReqCnt" class="cnt-badge" style="margin-left:6px">0</span></div>
+            <div class="admin-card-body" id="adminVendorReqList"></div>
+          </div>
+          <!-- Vendor Management -->
+          <div class="admin-card">
+            <div class="admin-card-hdr"><i class="ti ti-building-store"></i> Vendor Master · 거래처 마스터 관리</div>
+            <div class="admin-card-body" id="adminVendorList"></div>
           </div>
           <!-- Danger Zone -->
           <div class="admin-card">
@@ -766,15 +1042,21 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 // MEMBERS — JINHA LEE is ADMIN
 // ═══════════════════════════════════════════
 let MEMBERS = [
-  {id:1, name:'JINHA LEE',    role:'GENERAL MANAGER', dept:'SOURCING',  pw:'#Seoul1989#',  isAdmin:true},
-  {id:2, name:'HWAN SHIN YU', role:'MANAGER',          dept:'FURNITURE', pw:'HWAN SHIN YU', isAdmin:false},
-  {id:3, name:'HANA',         role:'PROJECT MANAGER',  dept:'FURNITURE', pw:'HANA',         isAdmin:false},
-  {id:4, name:'KMON',         role:'DESIGNER',         dept:'FURNITURE', pw:'KMON',         isAdmin:false},
+  {id:1, name:'JINHA LEE',    role:'GENERAL MANAGER', dept:'SOURCING',  pw:'JINHA',      isAdmin:true},
+  {id:2, name:'HWAN SHIN YU', role:'MANAGER',          dept:'FURNITURE', pw:'HWANSHINYU', isAdmin:false},
+  {id:3, name:'HANA',         role:'PROJECT MANAGER',  dept:'FURNITURE', pw:'HANA',       isAdmin:false},
+  {id:4, name:'KMON',         role:'DESIGNER',         dept:'FURNITURE', pw:'KMON',       isAdmin:false},
+  {id:5, name:'JACOB',        role:'CEO',              dept:'COMMON',    pw:'JACOB',      isAdmin:false},
 ];
-const LINES = {FURNITURE:{a1:2,a2:1}, SOURCING:{a1:1,a2:null}};
-const ADMIN_EXTRA_PW = '#Seoul1989#'; // Admin panel extra password · 관리자 패널 추가 비밀번호
+const LINES = {FURNITURE:{a1:2,a2:1}, SOURCING:{a1:1,a2:null}, COMMON:{a1:1,a2:null}};
+const ADMIN_EXTRA_PW = 'JINHA'; // Admin panel extra password · 관리자 패널 추가 비밀번호
 
-let state = {docs:[], nextId:1, docSeq:{}, memberPasswords:{}};
+let state = {
+  docs:[], nextId:1, docSeq:{}, memberPasswords:{}, memberPhotos:{},
+  departments:['FURNITURE','SOURCING'],
+  vendors:[], vendorRequests:[], vendorReqSeq:0,
+  docTypes:['지출결의서 · Expense Report','휴가신청서 · Leave Request','업무보고서 · Work Report','기타 · Other']
+};
 let curPage='dashboard', curFilter='all', curDocId=null;
 let mineUserId=null, mineFilter='all', mineDocId=null;
 let newAuthId=null, sessionIsAdmin=false;
@@ -798,7 +1080,7 @@ function setSyncStatus(status, msg) {
     bar.className='sync-bar offline';
     bar.innerHTML=`<i class="ti ti-cloud-off"></i><span>${msg}</span>`;
   }
-  if(foot) foot.textContent = status==='ok'?'Online · 연결됨':'Offline · 오프라인';
+  if(foot) foot.textContent = status==='ok'?'Online · 연결됨 ✓':'Offline · 오프라인';
 }
 
 async function saveState() {
@@ -819,22 +1101,42 @@ async function saveState() {
 async function loadState() {
   let loaded = null;
   if(fbReady && window._fbLoad) {
-    loaded = await window._fbLoad();
-    if(loaded){ setSyncStatus('ok','Connected · Firebase 연결됨'); }
-    else { setSyncStatus('ok','Connected · Firebase 연결됨 (new database)'); }
+    try {
+      loaded = await window._fbLoad();
+      setSyncStatus('ok', loaded ? 'Live sync · 실시간 동기화' : 'Connected · Firebase 연결됨');
+    } catch(e) {
+      console.error('Load error:', e);
+    }
   }
   if(!loaded) {
     try{ const s=localStorage.getItem('inics_local'); if(s) loaded=JSON.parse(s); }catch(_){}
-    if(!loaded) setSyncStatus('error','Firebase not configured · Firebase 설정 필요');
+    setSyncStatus(loaded ? 'ok' : 'ok', loaded ? 'Local mode · 로컬 모드' : 'Ready · 준비 완료');
   }
-  if(loaded){ state=loaded; if(!state.docSeq)state.docSeq={}; if(!state.memberPasswords)state.memberPasswords={}; }
+  if(loaded && loaded.docs !== undefined){ 
+    state=loaded; 
+    if(!state.docSeq)state.docSeq={}; 
+    if(!state.memberPasswords)state.memberPasswords={};
+    if(!state.memberPhotos)state.memberPhotos={};
+    if(!state.vendors)state.vendors=[];
+    if(!state.vendorRequests)state.vendorRequests=[];
+    if(state.vendorReqSeq===undefined)state.vendorReqSeq=0;
+  }
   // apply saved passwords
   if(state.memberPasswords){Object.entries(state.memberPasswords).forEach(([id,pw])=>{const m=MEMBERS.find(m=>m.id==id);if(m)m.pw=pw;});}
+  // restore extra members added by admin
+  if(state.extraMembers){
+    state.extraMembers.forEach(function(u){
+      if(!MEMBERS.find(function(m){ return m.id===u.memberId; })){
+        // re-add if missing (e.g. page reload)
+      }
+    });
+  }
   populateSelects(); render();
   // realtime listener
   if(fbReady && window._fbListen){
     window._fbListen(remote=>{
       state=remote; if(!state.docSeq)state.docSeq={}; if(!state.memberPasswords)state.memberPasswords={};
+      if(!state.vendors)state.vendors=[]; if(!state.vendorRequests)state.vendorRequests=[]; if(state.vendorReqSeq===undefined)state.vendorReqSeq=0;
       if(state.memberPasswords){Object.entries(state.memberPasswords).forEach(([id,pw])=>{const m=MEMBERS.find(m=>m.id==id);if(m)m.pw=pw;});}
       render(); setSyncStatus('ok','Live sync · 실시간 동기화');
     });
@@ -874,11 +1176,39 @@ function showPage(name){
   document.getElementById('page-'+name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')&&n.getAttribute('onclick').includes(`'${name}'`))n.classList.add('active');});
-  const titles={dashboard:'Dashboard · 대시보드',list:'All Documents · 전체 문서',mine:'My Documents · 내 문서함',new:'New Draft · 기안하기',admin:'Admin Panel · 관리자 패널'};
+  const titles={dashboard:'전자결재 Dashboard · 전자결재 대시보드',list:'All Documents · 전체 문서',mine:'My Documents · 내 문서함',new:'New Draft · 기안하기',admin:'Admin Panel · 관리자 패널',vendors:'Vendors · 거래처 DB'};
   document.getElementById('pageTitle').textContent=titles[name]||'';
   if(name==='dashboard')renderDashboard();
   if(name==='list')renderList();
   if(name==='admin')renderAdmin();
+  if(name==='vendors')renderVendorDB();
+  if(name==='new')populateVendorDatalist();
+  if(name==='mine') {
+    var gu2 = window._gateUser;
+    if (!gu2) {
+      var uid2 = parseInt(sessionStorage.getItem('inics_uid')||'0');
+      if (uid2 && typeof MEMBERS !== 'undefined') gu2 = MEMBERS.find(function(m){ return m.id==uid2; });
+    }
+    if (gu2 && !mineUserId) {
+      mineUserId = gu2.id;
+      document.getElementById('mineAuthWrap').style.display = 'none';
+      document.getElementById('mineContentWrap').style.display = 'block';
+      document.getElementById('mineTitle').textContent = gu2.name + "'s Documents · " + gu2.name + "의 문서함";
+      setTimeout(function(){ renderMineList(); }, 50);
+    }
+  }
+  if(name==='new') {
+    // Try _gateUser first, then check sessionStorage
+    var gu = window._gateUser;
+    if (!gu) {
+      var uid = parseInt(sessionStorage.getItem('inics_uid')||'0');
+      if (uid && typeof MEMBERS !== 'undefined') {
+        gu = MEMBERS.find(function(m){ return m.id == uid; });
+        if (gu) window._gateUser = gu;
+      }
+    }
+    if (gu) { setTimeout(function(){ showNewForm(gu); }, 50); }
+  }
   if(name!=='list')curDocId=null;
 }
 
@@ -946,6 +1276,8 @@ function docRowHTML(doc,selId,wrap){
         <span><i class="ti ti-user" style="font-size:10px"></i> ${gm(doc.drafterId)?.name||'—'}</span>
         ${attCnt?`<span style="color:#3b82f6"><i class="ti ti-paperclip" style="font-size:10px"></i> ${attCnt}</span>`:''}
         ${doc.needPayment?`<span style="color:var(--payment)"><i class="ti ti-credit-card" style="font-size:10px"></i> PAYMENT</span>`:''}
+        ${doc.status==='pending1'?`<span style="color:var(--warning);font-weight:500"><i class="ti ti-clock" style="font-size:10px"></i> 대기: ${gm(doc.a1Id)?.name||'—'}</span>`:''}
+        ${doc.status==='pending2'?`<span style="color:#1d4ed8;font-weight:500"><i class="ti ti-clock" style="font-size:10px"></i> 대기: ${gm(doc.a2Id)?.name||'—'}</span>`:''}
       </div>
     </div>
     <span class="badge ${sBadge(doc.status)}">${sLabel(doc.status)}</span>
@@ -1053,8 +1385,8 @@ function showDetail(id,wrapId='detailWrap'){
     const col={done:'color:var(--success)',active:'color:var(--warning)',reject:'color:var(--danger)',pay:'color:var(--payment)'}[st]||'color:var(--text-3)';
     return`<div class="fcircle ${cls}"><i class="ti ti-${icon}" style="font-size:14px;${col}"></i></div>`;
   }
-  let flow=`<div class="fnode">${circle(stepSt('drafter'),'pencil')}<div class="flabel">${drafter?.name||'—'}</div><div class="fsub">Draft · 기안</div></div>`;
-  flow+=`<div class="farrow"><i class="ti ti-chevron-right"></i></div><div class="fnode">${circle(stepSt('a1'),'user-check')}<div class="flabel">${a1?.name||'—'}</div><div class="fsub">1st · 1차</div></div>`;
+  let flow=`<div class="fnode">${getAvatar(doc.drafterId,'sm')}<div class="flabel" style="margin-top:3px">${drafter?.name||'—'}</div><div class="fsub">Draft · 기안</div></div>`;
+  flow+=`<div class="farrow"><i class="ti ti-chevron-right"></i></div><div class="fnode">${getAvatar(doc.a1Id,'sm')}<div class="flabel" style="margin-top:3px">${a1?.name||'—'}</div><div class="fsub">1st · 1차</div></div>`;
   if(a2)flow+=`<div class="farrow"><i class="ti ti-chevron-right"></i></div><div class="fnode">${circle(stepSt('a2'),'user-check')}<div class="flabel">${a2.name}</div><div class="fsub">2nd · 2차</div></div>`;
   if(doc.needPayment)flow+=`<div class="farrow"><i class="ti ti-chevron-right"></i></div><div class="fnode">${circle(stepSt('pay'),'credit-card')}<div class="flabel">PAYMENT</div><div class="fsub">결제</div></div>`;
   flow+=`<div class="farrow"><i class="ti ti-chevron-right"></i></div><div class="fnode">${circle(stepSt('done'),'circle-check')}<div class="flabel">Done · 완료</div></div>`;
@@ -1073,10 +1405,33 @@ function showDetail(id,wrapId='detailWrap'){
     actionHTML=`<div class="pay-box"><div class="pay-box-title"><i class="ti ti-credit-card" style="font-size:16px"></i> Payment Processing · PAYMENT — 결제 증빙 첨부</div>${attListHTML(pa,true,id,'pay')}<div class="upload-zone" style="margin-top:10px" onclick="triggerPayFile(${id})"><i class="ti ti-upload" style="font-size:20px;display:block;margin-bottom:5px"></i>Upload receipt · 결제 증빙 첨부</div><button class="btn btn-payment" style="margin-top:10px" onclick="completePayment(${id},'${wrapId}')" ${!pa.length?'disabled':''}><i class="ti ti-circle-check"></i> Complete Payment · 결제 완료 처리</button></div>`;
   }
   if(s==='draft'){
-    actionHTML=`<div class="btn-row" style="margin-top:14px"><button class="btn btn-dark" onclick="resubmit(${id},'${wrapId}')"><i class="ti ti-send"></i> Submit · 결재 상신</button><button class="btn btn-danger" onclick="deleteDoc(${id})"><i class="ti ti-trash"></i> Delete · 삭제</button></div>`;
+    actionHTML=`<div class="btn-row" style="margin-top:14px">
+      <button class="btn btn-outline" onclick="editDoc(${id},'${wrapId}')"><i class="ti ti-edit"></i> Edit · 수정</button>
+      <button class="btn btn-dark" onclick="resubmit(${id},'${wrapId}')"><i class="ti ti-send"></i> Submit · 결재 상신</button>
+      <button class="btn btn-danger" onclick="deleteDoc(${id})"><i class="ti ti-trash"></i> Delete · 삭제</button>
+    </div>`;
+  }
+  // Also show recall button for pending1 docs where current user is drafter
+  var currentUid2 = mineUserId || parseInt(sessionStorage.getItem('inics_uid')||'0') || newAuthId;
+  if(s==='pending1' && doc.drafterId && doc.drafterId === currentUid2){
+    actionHTML += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <button class="btn btn-outline" onclick="recallDoc(${id},'${wrapId}')">
+        <i class="ti ti-arrow-back-up"></i> Recall & Edit · 회수 후 수정
+      </button>
+    </div>`;
   }
 
-  document.getElementById(wrapId).innerHTML=`<div class="detail-panel" id="dp_${wrapId}"><div class="detail-hdr"><div style="flex:1;min-width:0"><div class="detail-title">${doc.docNo?`<span style="font-family:var(--mono);font-size:10px;color:var(--text-3);font-weight:400;margin-right:8px">${doc.docNo}</span>`:''}${doc.title}</div><div class="detail-badges"><span class="badge ${sBadge(s)}">${sLabel(s)}</span><span class="badge b-${doc.dept==='FURNITURE'?'furniture':'sourcing'}">${doc.dept}</span>${doc.needPayment?'<span class="badge b-payment">PAYMENT required · 필요</span>':''}</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-outline" onclick="printPDF(${id})" style="font-size:11px;padding:5px 10px"><i class="ti ti-printer"></i> PDF</button><button class="btn btn-outline" onclick="closeDetail('${wrapId}')" style="padding:5px 9px"><i class="ti ti-x"></i></button></div></div><div class="detail-body"><div class="flow-track">${flow}</div><hr class="divider"><div class="info-grid"><div class="ifield"><div class="lbl">Type · 유형</div><div class="val">${doc.type}</div></div><div class="ifield"><div class="lbl">Created · 기안일</div><div class="val">${doc.createdAt}</div></div>${doc.amount?`<div class="ifield"><div class="lbl">Amount · 금액</div><div class="val" style="font-weight:600">${doc.currency} ${doc.amount}</div></div>`:''} ${doc.doneAt?`<div class="ifield"><div class="lbl">Completed · 완료일</div><div class="val">${doc.doneAt}</div></div>`:''}</div>${doc.content?`<div class="ifield" style="margin-bottom:14px"><div class="lbl">Description · 내용</div><div class="val" style="margin-top:3px;line-height:1.7;white-space:pre-wrap;font-size:13px">${doc.content}</div></div>`:''}
+  // Admin can delete any document
+  var isAdmin = sessionIsAdmin || (typeof window._gateUser !== 'undefined' && window._gateUser && window._gateUser.isAdmin);
+  if(s!=='draft' && isAdmin){
+    actionHTML += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <button class="btn btn-danger" onclick="adminDeleteDoc(${id},'${wrapId}')" style="font-size:11px">
+        <i class="ti ti-shield-x"></i> Admin Delete · 관리자 삭제
+      </button>
+    </div>`;
+  }
+
+  document.getElementById(wrapId).innerHTML=`<div class="detail-panel" id="dp_${wrapId}"><div class="detail-hdr"><div style="flex:1;min-width:0"><div class="detail-title">${doc.docNo?`<span style="font-family:var(--mono);font-size:10px;color:var(--text-3);font-weight:400;margin-right:8px">${doc.docNo}</span>`:''}${doc.title}</div><div class="detail-badges"><span class="badge ${sBadge(s)}">${sLabel(s)}</span><span class="badge b-${doc.dept==='FURNITURE'?'furniture':'sourcing'}">${doc.dept}</span>${doc.needPayment?'<span class="badge b-payment">PAYMENT required · 필요</span>':''}</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-outline" onclick="printPDF(${id})" style="font-size:11px;padding:5px 10px"><i class="ti ti-printer"></i> PDF</button><button class="btn btn-outline" onclick="closeDetail('${wrapId}')" style="padding:5px 9px"><i class="ti ti-x"></i></button></div></div><div class="detail-body"><div class="flow-track">${flow}</div><hr class="divider"><div class="info-grid"><div class="ifield"><div class="lbl">Type · 유형</div><div class="val">${doc.type}</div></div><div class="ifield"><div class="lbl">Created · 기안일</div><div class="val">${doc.createdAt}</div></div>${doc.amount?`<div class="ifield"><div class="lbl">Amount · 금액</div><div class="val" style="font-weight:600">${doc.currency} ${Number(doc.amount.replace(/,/g,'')).toLocaleString()}</div></div>`:''} ${doc.doneAt?`<div class="ifield"><div class="lbl">Completed · 완료일</div><div class="val">${doc.doneAt}</div></div>`:''}</div>${doc.content||doc.descImage?`<div class="ifield" style="margin-bottom:14px"><div class="lbl" style="font-size:11px;font-weight:700;margin-bottom:6px">Description · 내용</div><div class="val" style="margin-top:3px;line-height:1.8;white-space:pre-wrap;font-size:13px">${doc.content||''}</div>${doc.descImage?'<img src="'+doc.descImage+'" style="max-width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-top:10px">':''}` + '</div>':''}
       ${doc.expenseData ? expenseDetailHTML(doc.expenseData) : ''}
       ${draftAttHTML}<hr class="divider"><div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px">Approval History · 결재 이력</div><div class="cmt-list">${cmts}</div>${actionHTML}</div></div>`;
   document.getElementById(`dp_${wrapId}`)?.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -1089,8 +1444,27 @@ function closeDetail(wrapId){
 }
 
 function attListHTML(atts,deletable,docId,type){
-  if(!atts||!atts.length)return'<div style="font-size:11px;color:var(--text-3);padding:3px 0">No attachments · 첨부 없음</div>';
-  return atts.map((a,i)=>`<div class="att-item"><i class="ti ${fileIcon(a.name)} att-icon"></i><span class="att-name" title="${a.name}">${a.name}</span><span class="att-size">${a.size}</span>${deletable?`<button class="att-del" onclick="removeAtt(${docId},'${type}',${i})"><i class="ti ti-x" style="font-size:13px"></i></button>`:''}</div>`).join('');
+  if(!atts||!atts.length)return '<div style="font-size:11px;color:var(--text-3);padding:3px 0">No attachments</div>';
+  return atts.map(function(a,i){
+    var dlBtn = a.data ? '<button class="att-del" style="color:var(--success)" onclick="downloadAtt('+String(docId)+String(",")+JSON.stringify(type)+String(",")+String(i)+')" title="DL"><i class="ti ti-download" style="font-size:13px"></i></button>' : '';
+    var delBtn = deletable ? '<button class="att-del" onclick="removeAtt('+String(docId)+String(",")+JSON.stringify(type)+String(",")+String(i)+')" title="Del"><i class="ti ti-x" style="font-size:13px"></i></button>' : '';
+    return '<div class="att-item"><i class="ti '+fileIcon(a.name)+' att-icon"></i><span class="att-name">'+a.name+'</span><span class="att-size">'+a.size+'</span>'+dlBtn+delBtn+'</div>';
+  }).join('');
+}
+
+function downloadAtt(docId, type, idx){
+  var doc = state.docs.find(function(d){ return d.id == docId; });
+  if(!doc) return;
+  var atts = type === 'draft' ? doc.draftAtts : doc.payAtts;
+  var att = atts && atts[idx];
+  if(!att || !att.data){ showToast('No file data - re-attach file'); return; }
+  var a = document.createElement('a');
+  a.href = att.data;
+  a.download = att.name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('Downloading: ' + att.name);
 }
 
 function removeAtt(docId,type,idx){const doc=state.docs.find(d=>d.id===docId);if(!doc)return;if(type==='draft')doc.draftAtts.splice(idx,1);else doc.payAtts.splice(idx,1);saveState();const wrap=curDocId===docId?'detailWrap':'mineDetailWrap';if(wrap==='detailWrap')renderList();else renderMineList();}
@@ -1117,7 +1491,7 @@ function loginNew(){
   if(m.isAdmin){sessionIsAdmin=true;document.getElementById('sessionAdminBadge').style.display='';document.getElementById('nav-admin').style.display='';}
   renderDraftAttList();onDeptChange();
 }
-function logoutNew(){newAuthId=null;draftAtts=[];sessionIsAdmin=false;document.getElementById('newAuthWrap').style.display='block';document.getElementById('newFormWrap').style.display='none';document.getElementById('sessionChip').style.display='none';document.getElementById('nav-admin').style.display='none';}
+function logoutNew(){newAuthId=null;draftAtts=[];sessionIsAdmin=false;window._editingDocId=null;document.getElementById('newAuthWrap').style.display='block';document.getElementById('newFormWrap').style.display='none';document.getElementById('sessionChip').style.display='none';document.getElementById('nav-admin').style.display='none';}
 function globalLogout(){newAuthId=null;sessionIsAdmin=false;document.getElementById('sessionChip').style.display='none';document.getElementById('newAuthWrap').style.display='block';document.getElementById('newFormWrap').style.display='none';document.getElementById('nav-admin').style.display='none';document.getElementById('sessionAdminBadge').style.display='none';}
 
 function loginMine(){
@@ -1126,6 +1500,7 @@ function loginMine(){
   if(!m||pw!==m.pw){document.getElementById('mineErr').style.display='block';return;}
   document.getElementById('mineErr').style.display='none';document.getElementById('minePw').value='';
   mineUserId=id;
+  sessionStorage.setItem('inics_uid', String(id));
   document.getElementById('mineAuthWrap').style.display='none';document.getElementById('mineContentWrap').style.display='block';
   document.getElementById('mineTitle').textContent=`${m.name}'s Documents · ${m.name}의 문서함`;
   renderMineList();
@@ -1145,9 +1520,176 @@ function logoutAdmin(){document.getElementById('adminAuthWrap').style.display='b
 // ═══════════════════════════════════════════
 // ADMIN PANEL
 // ═══════════════════════════════════════════
+
+
+function renderApproverLines() {
+  var el = document.getElementById('adminApproverLines');
+  if(!el) return;
+  var depts = state.departments || ['FURNITURE','SOURCING','COMMON'];
+  var lines = state.approverLines || {};
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">';
+  depts.forEach(function(dept) {
+    var line = lines[dept] || LINES[dept] || {a1:1,a2:null};
+    var opts1 = MEMBERS.map(function(m){
+      return '<option value="' + m.id + '"' + (line.a1 == m.id ? ' selected' : '') + '>' + m.name + ' (' + m.role + ')</option>';
+    }).join('');
+    var opts2 = '<option value=""' + (line.a2 == null ? ' selected' : '') + '>None · 없음 (1차 최종)</option>'
+      + MEMBERS.map(function(m){
+        return '<option value="' + m.id + '"' + (line.a2 == m.id ? ' selected' : '') + '>' + m.name + ' (' + m.role + ')</option>';
+      }).join('');
+    html += '<div style="background:var(--surface-2);border-radius:var(--radius);padding:12px;border:1px solid var(--border)">'
+      + '<div style="font-size:12px;font-weight:600;margin-bottom:8px">' + dept + '</div>'
+      + '<div class="fg" style="margin-bottom:8px"><label style="font-size:10px">1st Approver · 1차</label>'
+      + '<select data-dept="' + dept + '" data-pos="a1" onchange="saveApproverLine(this)">' + opts1 + '</select></div>'
+      + '<div class="fg"><label style="font-size:10px">2nd Approver · 2차 (선택)</label>'
+      + '<select data-dept="' + dept + '" data-pos="a2" onchange="saveApproverLine(this)">' + opts2 + '</select></div>'
+      + '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function saveApproverLine(selectEl) {
+  var dept = selectEl.getAttribute('data-dept');
+  var pos = selectEl.getAttribute('data-pos');
+  var val = selectEl.value;
+  if(!state.approverLines) state.approverLines = {};
+  var cur = state.approverLines[dept] || LINES[dept] || {a1:1, a2:null};
+  if(pos === 'a1') cur = {a1: parseInt(val), a2: cur.a2};
+  else cur = {a1: cur.a1, a2: (val === '' ? null : parseInt(val))};
+  state.approverLines[dept] = cur;
+  saveState();
+  showToast(dept + ' 결재선 저장 완료');
+}
+
+function renderDeptTypeAdmin() {
+  var depts = state.departments || ['FURNITURE','SOURCING'];
+  var types = state.docTypes || ['지출결의서 · Expense Report','휴가신청서 · Leave Request','업무보고서 · Work Report','기타 · Other'];
+  
+  var deptEl = document.getElementById('adminDeptList');
+  if(deptEl) deptEl.innerHTML = depts.map(function(d,i){
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">'
+      +'<span>'+d+'</span>'
+      +(depts.length>1?'<button class="att-del" onclick="removeDept('+i+')" style="color:var(--danger)"><i class="ti ti-x" style="font-size:13px"></i></button>':'')
+      +'</div>';
+  }).join('');
+
+  var typeEl = document.getElementById('adminTypeList');
+  if(typeEl) typeEl.innerHTML = types.map(function(t,i){
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
+      +'<span>'+t+'</span>'
+      +(types.length>1?'<button class="att-del" onclick="removeDocType('+i+')" style="color:var(--danger)"><i class="ti ti-x" style="font-size:13px"></i></button>':'')
+      +'</div>';
+  }).join('');
+}
+
+function addDept() {
+  var val = document.getElementById('newDeptInput').value.trim().toUpperCase();
+  if(!val) return;
+  if(!state.departments) state.departments = ['FURNITURE','SOURCING'];
+  if(state.departments.includes(val)){showToast('Already exists · 이미 존재');return;}
+  state.departments.push(val);
+  document.getElementById('newDeptInput').value = '';
+  saveState(); renderDeptTypeAdmin(); populateDeptTypeSelects();
+  showToast('Added · 추가: '+val);
+}
+
+function removeDept(idx) {
+  if(!state.departments || state.departments.length <= 1) return;
+  state.departments.splice(idx,1);
+  saveState(); renderDeptTypeAdmin(); populateDeptTypeSelects();
+  showToast('Removed · 삭제 완료');
+}
+
+function addDocType() {
+  var val = document.getElementById('newTypeInput').value.trim();
+  if(!val) return;
+  if(!state.docTypes) state.docTypes = [];
+  state.docTypes.push(val);
+  document.getElementById('newTypeInput').value = '';
+  saveState(); renderDeptTypeAdmin(); populateDeptTypeSelects();
+  showToast('Added · 추가: '+val);
+}
+
+function removeDocType(idx) {
+  if(!state.docTypes || state.docTypes.length <= 1) return;
+  state.docTypes.splice(idx,1);
+  saveState(); renderDeptTypeAdmin(); populateDeptTypeSelects();
+  showToast('Removed · 삭제 완료');
+}
+
+
+function addMember() {
+  var name = document.getElementById('newMemberName').value.trim().toUpperCase();
+  var loginId = document.getElementById('newMemberId').value.trim().toUpperCase();
+  var pw = document.getElementById('newMemberPw').value.trim();
+  var role = document.getElementById('newMemberRole').value.trim().toUpperCase();
+  var dept = document.getElementById('newMemberDept').value;
+
+  if(!name||!loginId||!pw||!role){ showToast('모든 필드를 입력하세요 · Fill all fields'); return; }
+  if(MEMBERS.find(function(m){ return m.name===name; })){ showToast('이미 존재합니다 · Already exists'); return; }
+
+  // New member id
+  var newId = Math.max.apply(null, MEMBERS.map(function(m){ return m.id; })) + 1;
+  MEMBERS.push({id:newId, name:name, role:role, dept:dept, pw:pw, isAdmin:false});
+
+  // Add to gate users (stored in state for persistence)
+  if(!state.extraMembers) state.extraMembers = [];
+  state.extraMembers.push({id:loginId, pw:pw, name:name, memberId:newId});
+
+  saveState();
+  populateSelects();
+  renderAdmin();
+  renderApproverLines();
+
+  // Clear form
+  ['newMemberName','newMemberId','newMemberPw','newMemberRole'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.value = '';
+  });
+  showToast('Added · 추가 완료: ' + name);
+}
+
+function removeMember() {
+  var id = parseInt(document.getElementById('removeMemberWho').value);
+  var m = MEMBERS.find(function(m){ return m.id === id; });
+  if(!m){ showToast('Member not found'); return; }
+  if(m.isAdmin){ showToast('Admin cannot be removed · 관리자는 삭제 불가'); return; }
+  if(!confirm(m.name + ' 을 삭제하시겠습니까?\nRemove this member?')) return;
+
+  MEMBERS = MEMBERS.filter(function(m){ return m.id !== id; });
+  if(state.extraMembers) state.extraMembers = state.extraMembers.filter(function(u){ return u.memberId !== id; });
+
+  saveState();
+  populateSelects();
+  renderAdmin();
+  renderApproverLines();
+  showToast('Removed · 삭제 완료: ' + m.name);
+}
+
 function renderAdmin(){
   const ml=document.getElementById('adminMemberList');
-  if(ml){ml.innerHTML=MEMBERS.map(m=>`<div class="member-row"><div class="member-info"><div class="member-name">${m.name}${m.isAdmin?` <span class="badge b-admin" style="font-size:9px">Admin</span>`:''}</div><div class="member-role">${m.role} · ${m.dept}</div></div><div class="pw-dot">●●●●</div></div>`).join('');}
+  if(ml){ml.innerHTML=MEMBERS.map(m=>`<div class="member-row">
+    <label class="photo-upload-btn" title="Click to upload photo · 클릭하여 사진 업로드">
+      ${getAvatar(m.id,'sm')}
+      <div class="photo-upload-overlay"><i class="ti ti-camera" style="font-size:14px"></i></div>
+      <input type="file" accept="image/*" onchange="handlePhotoUpload(${m.id},this.files[0])">
+    </label>
+    <div class="member-info">
+      <div class="member-name">${m.name}${m.isAdmin?` <span class="badge b-admin" style="font-size:9px">Admin</span>`:''}</div>
+      <div class="member-role">${m.role} · ${m.dept}</div>
+    </div>
+    <div class="pw-dot">●●●●</div>
+  </div>`).join('');}
+  renderApproverLines();
+  renderDeptTypeAdmin();
+  renderAdminVendorReqs();
+  renderAdminVendors();
+  // Populate add member dept select
+  var nmd = document.getElementById('newMemberDept');
+  if(nmd){ nmd.innerHTML = (state.departments||['FURNITURE','SOURCING','COMMON']).map(function(d){ return '<option>'+d+'</option>'; }).join(''); }
+  // Populate remove member select
+  var rmw = document.getElementById('removeMemberWho');
+  if(rmw){ rmw.innerHTML = MEMBERS.filter(function(m){ return !m.isAdmin; }).map(function(m){ return '<option value="'+m.id+'">'+m.name+' ('+m.role+')</option>'; }).join(''); }
   const as=document.getElementById('adminStats');
   if(as){
     const c={draft:0,pending1:0,pending2:0,payment:0,done:0,rejected:0};
@@ -1177,16 +1719,115 @@ function clearDone(){
   saveState();render();renderAdmin();showToast('Cleared · 삭제 완료');
 }
 
+// ── Vendor master & change requests (admin) ──
+function vendorBankSummary(v){
+  if((v.bankType||'vn')==='vn')
+    return (v.bankVN||'—')+' | '+(v.bankVNAcct||'—')+' | '+(v.bankVNHolder||'—')+(v.bankVNBranch?' ('+v.bankVNBranch+')':'');
+  return (v.bankForeignName||'—')+' | SWIFT:'+(v.bankSwift||'—')+' | '+(v.bankForeignAcct||'—')+' | '+(v.bankForeignHolder||'—')+(v.bankForeignAddr?' | '+v.bankForeignAddr:'');
+}
+var VENDOR_FIELD_LABEL = {reg:'사업자번호',bankType:'은행구분',bankVN:'은행명(VN)',bankVNAcct:'계좌번호',bankVNHolder:'예금주',bankVNBranch:'지점',
+  bankForeignName:'은행명',bankSwift:'SWIFT',bankForeignAcct:'계좌번호',bankForeignHolder:'예금주',bankForeignAddr:'은행주소'};
+
+function renderAdminVendorReqs(){
+  var el = document.getElementById('adminVendorReqList'); if(!el) return;
+  var reqs = (state.vendorRequests||[]).filter(function(r){ return r.status==='pending'; });
+  var cnt = document.getElementById('adminVendorReqCnt'); if(cnt) cnt.textContent = reqs.length;
+  if(!reqs.length){ el.innerHTML = '<p style="font-size:12px;color:var(--text-3)">No pending requests · 대기 중인 요청 없음</p>'; return; }
+  el.innerHTML = reqs.map(function(r){
+    var diff = Object.keys(r.changes||{}).map(function(f){
+      var c=r.changes[f]; return '<div style="font-size:11px;padding:2px 0"><strong>'+(VENDOR_FIELD_LABEL[f]||f)+'</strong>: <span style="color:var(--text-3);text-decoration:line-through">'+(c.from||'(없음)')+'</span> → <span style="color:#15803d">'+(c.to||'(없음)')+'</span></div>';
+    }).join('');
+    return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
+      +'<div style="font-size:13px;font-weight:600;margin-bottom:4px">'+r.vendorName+'</div>'
+      +'<div style="font-size:10px;color:var(--text-3);margin-bottom:6px">요청자 '+r.requestedBy+' · '+r.requestedAt+'</div>'
+      +diff
+      +'<div style="display:flex;gap:6px;margin-top:8px">'
+      +'<button class="btn btn-dark" style="font-size:11px;padding:4px 10px" onclick="applyVendorReq('+r.id+')"><i class="ti ti-check"></i> 승인 · Apply</button>'
+      +'<button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="rejectVendorReq('+r.id+')"><i class="ti ti-x"></i> 반려 · Reject</button>'
+      +'</div></div>';
+  }).join('');
+}
+
+function applyVendorReq(id){
+  var r = (state.vendorRequests||[]).find(function(x){ return x.id===id; });
+  if(!r) return;
+  if(!confirm('이 변경을 거래처 마스터에 반영할까요?\nApply changes to vendor master?')) return;
+  if(!state.vendors) state.vendors=[];
+  var key = r.vendorName.trim().toLowerCase();
+  var rec = state.vendors.find(function(v){ return v.name.trim().toLowerCase()===key; });
+  if(!rec){
+    // promote doc-derived vendor into master
+    var derived = buildVendorIndex()[key] || {name:r.vendorName, bankType:'vn'};
+    rec = Object.assign({}, derived); delete rec.source;
+    state.vendors.push(rec);
+  }
+  Object.keys(r.changes).forEach(function(f){ rec[f] = r.changes[f].to; });
+  rec.updatedAt = nowStr();
+  r.status = 'applied'; r.resolvedAt = nowStr();
+  saveState(); renderAdmin();
+  if(typeof renderVendorDB==='function') renderVendorDB();
+  showToast('변경 반영 완료 · Applied');
+}
+
+function rejectVendorReq(id){
+  var r = (state.vendorRequests||[]).find(function(x){ return x.id===id; });
+  if(!r) return;
+  if(!confirm('이 요청을 반려할까요?\nReject this request?')) return;
+  r.status = 'rejected'; r.resolvedAt = nowStr();
+  saveState(); renderAdmin();
+  showToast('반려 처리 · Rejected');
+}
+
+function renderAdminVendors(){
+  var el = document.getElementById('adminVendorList'); if(!el) return;
+  var all = getAllVendors();
+  var list = Object.keys(all).map(function(k){ return all[k]; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+  if(!list.length){ el.innerHTML = '<p style="font-size:12px;color:var(--text-3)">No vendors · 거래처 없음</p>'; return; }
+  el.innerHTML = list.map(function(v){
+    var tag = v.source==='master' ? '<span class="badge b-done" style="font-size:9px">Master</span>' : '<span class="badge b-draft" style="font-size:9px">Doc</span>';
+    var del = v.source==='master' ? '<button class="btn btn-outline" style="font-size:10px;padding:3px 8px" onclick="deleteVendor(\''+v.name.replace(/'/g,"\\'")+'\')"><i class="ti ti-trash"></i></button>' : '';
+    return '<div style="border-bottom:1px solid var(--border);padding:8px 0">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+      +'<div style="font-size:13px;font-weight:600">'+v.name+' '+tag+(v.reg?' <span style="font-size:10px;color:var(--text-3)">'+v.reg+'</span>':'')+'</div>'+del+'</div>'
+      +'<div style="font-size:11px;color:var(--text-2);margin-top:3px">'+vendorBankSummary(v)+'</div></div>';
+  }).join('');
+}
+
+function deleteVendor(name){
+  if(!confirm('거래처 마스터에서 삭제할까요?\nDelete from vendor master? ('+name+')')) return;
+  var key = name.trim().toLowerCase();
+  state.vendors = (state.vendors||[]).filter(function(v){ return v.name.trim().toLowerCase()!==key; });
+  saveState(); renderAdmin();
+  if(typeof renderVendorDB==='function') renderVendorDB();
+  showToast('삭제 완료 · Deleted');
+}
+
 // ═══════════════════════════════════════════
 // FORM
 // ═══════════════════════════════════════════
 function onDeptChange(){
-  const dept=document.getElementById('docDept').value;const line=LINES[dept];const a1=gm(line.a1),a2=line.a2?gm(line.a2):null;
-  document.getElementById('linePreview').innerHTML=`<i class="ti ti-route" style="margin-right:5px"></i><strong>Approval Line · 결재선</strong> &nbsp; Drafter · 기안자 → 1st · 1차: ${a1?.name||'—'} (${a1?.role||''})${a2?' → 2nd · 2차: '+a2.name+' ('+a2.role+')':' → 2nd · 2차: None (Final · 최종)'}`;
+  const dept=document.getElementById('docDept').value;
+  var savedLine = state.approverLines && state.approverLines[dept];
+  const line = savedLine || LINES[dept] || {a1:1,a2:null};
+  const a1=gm(line.a1),a2=line.a2?gm(line.a2):null;
+  document.getElementById('linePreview').innerHTML='<i class="ti ti-route" style="margin-right:5px"></i><strong>Approval Line · 결재선</strong> &nbsp; Drafter · 기안자 → 1st · 1차: '+(a1?a1.name+' ('+a1.role+')':'—')+(a2?' → 2nd · 2차: '+a2.name+' ('+a2.role+')':' → 2nd · 2차: None (Final · 최종)');
 }
 
 function triggerDraftFile(){document.getElementById('draftFileInput').click();}
-function handleDraftFile(e){Array.from(e.target.files).forEach(f=>draftAtts.push({name:f.name,size:fmtSize(f.size),addedAt:nowStr()}));renderDraftAttList();e.target.value='';showToast(`${e.target.files.length} file(s) attached · 첨부됨`);}
+function handleDraftFile(e){
+  var files = Array.from(e.target.files);
+  var loaded = 0;
+  files.forEach(function(f){
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      draftAtts.push({name:f.name, size:fmtSize(f.size), addedAt:nowStr(), data:ev.target.result, type:f.type});
+      loaded++;
+      if(loaded===files.length){ renderDraftAttList(); showToast(files.length+' file(s) attached · 첨부됨'); }
+    };
+    reader.readAsDataURL(f);
+  });
+  e.target.value='';
+}
 function removeDraftAtt(idx){draftAtts.splice(idx,1);renderDraftAttList();}
 function renderDraftAttList(){
   document.getElementById('draftAttCnt').textContent=draftAtts.length;
@@ -1195,14 +1836,82 @@ function renderDraftAttList(){
   el.innerHTML=draftAtts.map((a,i)=>`<div class="att-item"><i class="ti ${fileIcon(a.name)} att-icon"></i><span class="att-name">${a.name}</span><span class="att-size">${a.size}</span><button class="att-del" onclick="removeDraftAtt(${i})"><i class="ti ti-x" style="font-size:13px"></i></button></div>`).join('')+`<div class="upload-zone" style="margin-top:7px;padding:9px" onclick="triggerDraftFile()"><i class="ti ti-plus" style="font-size:15px"></i> Add more · 추가</div>`;
 }
 
-function triggerAddAtt(docId){const inp=document.createElement('input');inp.type='file';inp.accept='image/*,.pdf,.xlsx,.xls,.docx,.doc';inp.multiple=true;inp.onchange=e=>{const doc=state.docs.find(d=>d.id===docId);if(!doc)return;doc.draftAtts=doc.draftAtts||[];Array.from(e.target.files).forEach(f=>doc.draftAtts.push({name:f.name,size:fmtSize(f.size),addedAt:nowStr()}));saveState();const wrap=curDocId===docId?'detailWrap':'mineDetailWrap';if(wrap==='detailWrap')renderList();else renderMineList();showToast('Attached · 첨부 완료');};inp.click();}
+function triggerAddAtt(docId){
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/*,.pdf,.xlsx,.xls,.docx,.doc';inp.multiple=true;
+  inp.onchange=function(e){
+    const doc=state.docs.find(d=>d.id===docId);if(!doc)return;
+    doc.draftAtts=doc.draftAtts||[];
+    var files=Array.from(e.target.files), loaded=0;
+    files.forEach(function(f){
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        doc.draftAtts.push({name:f.name,size:fmtSize(f.size),addedAt:nowStr(),data:ev.target.result,type:f.type});
+        loaded++;
+        if(loaded===files.length){
+          saveState();
+          const wrap=curDocId===docId?'detailWrap':'mineDetailWrap';
+          if(wrap==='detailWrap')renderList();else renderMineList();
+          showToast('Attached · 첨부 완료');
+        }
+      };
+      reader.readAsDataURL(f);
+    });
+  };
+  inp.click();
+}
 function triggerPayFile(id){pendingPayFileDocId=id;document.getElementById('payFileInput').click();}
-function handlePayFile(e){const file=e.target.files[0];if(!file||pendingPayFileDocId===null)return;const doc=state.docs.find(d=>d.id===pendingPayFileDocId);if(!doc)return;doc.payAtts=doc.payAtts||[];doc.payAtts.push({name:file.name,size:fmtSize(file.size),addedAt:nowStr()});saveState();const wrap=curDocId===doc.id?'detailWrap':mineDocId===doc.id?'mineDetailWrap':null;if(wrap){if(wrap==='detailWrap')renderList();else renderMineList();}e.target.value='';showToast(`"${file.name}" attached · 첨부 완료`);}
+function handlePayFile(e){
+  const file=e.target.files[0];if(!file||pendingPayFileDocId===null)return;
+  const doc=state.docs.find(d=>d.id===pendingPayFileDocId);if(!doc)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    doc.payAtts=doc.payAtts||[];
+    doc.payAtts.push({name:file.name,size:fmtSize(file.size),addedAt:nowStr(),data:ev.target.result,type:file.type});
+    saveState();
+    const wrap=curDocId===doc.id?'detailWrap':mineDocId===doc.id?'mineDetailWrap':null;
+    if(wrap){if(wrap==='detailWrap')renderList();else renderMineList();}
+    showToast('"'+file.name+'" attached · 첨부 완료');
+  };
+  reader.readAsDataURL(file);
+  e.target.value='';
+}
 
-function buildDoc(status){const dept=document.getElementById('docDept').value;const line=LINES[dept];const docNo=status==='pending1'?genDocNo(dept):null;return{id:state.nextId++,docNo,dept,type:document.getElementById('docType').value,drafterId:newAuthId,title:document.getElementById('docTitle').value.trim(),currency:document.getElementById('docCurrency').value,amount:document.getElementById('docAmount').value.trim(),content:document.getElementById('docContent').value.trim(),needPayment:getRadio('needPayment')==='yes',a1Id:line.a1,a2Id:line.a2,status,createdAt:today(),comments:[],draftAtts:[...draftAtts],payAtts:[]};}
+function buildDoc(status){const dept=document.getElementById('docDept').value;const line=(state.approverLines&&state.approverLines[dept])||LINES[dept]||{a1:1,a2:null};const docNo=status==='pending1'?genDocNo(dept):null;return{id:state.nextId++,docNo,dept,type:document.getElementById('docType').value,drafterId:newAuthId,title:document.getElementById('docTitle').value.trim(),currency:document.getElementById('docCurrency').value,amount:document.getElementById('docAmount').value.trim(),content:document.getElementById('docContent').value.trim(),descImage:descImageData||null,needPayment:getRadio('needPayment')==='yes',a1Id:line.a1,a2Id:line.a2,status,createdAt:today(),comments:[],draftAtts:[...draftAtts],payAtts:[],expenseData:getExpenseData()};}
 function saveDraft(){if(!document.getElementById('docTitle').value.trim()){showToast('Enter a title · 제목 입력 필요');return;}state.docs.push(buildDoc('draft'));saveState();clearForm();showToast('Saved as draft · 임시저장 완료');showPage('list');}
-function submitDoc(){if(!document.getElementById('docTitle').value.trim()){showToast('Enter a title · 제목 입력 필요');return;}const doc=buildDoc('pending1');state.docs.push(doc);curDocId=doc.id;saveState();clearForm();showToast(`Submitted · 결재 상신 — ${doc.docNo}`);showPage('list');}
-function clearForm(){['docTitle','docAmount','docContent'].forEach(id=>document.getElementById(id).value='');document.getElementById('docCurrency').value='USD';document.querySelector('input[name="needPayment"][value="no"]').checked=true;draftAtts=[];renderDraftAttList();clearExpenseForm();toggleExpenseDetail();}
+function submitDoc(){
+  if(!document.getElementById('docTitle').value.trim()){showToast('Enter a title · 제목 입력 필요');return;}
+  if(window._editingDocId) {
+    // Update existing doc
+    var idx = state.docs.findIndex(function(d){ return d.id === window._editingDocId; });
+    if(idx >= 0) {
+      var existing = state.docs[idx];
+      var dept = document.getElementById('docDept').value;
+      var line = LINES[dept]||{a1:1,a2:null};
+      existing.title = document.getElementById('docTitle').value.trim();
+      existing.dept = dept;
+      existing.type = document.getElementById('docType').value;
+      existing.currency = document.getElementById('docCurrency').value;
+      existing.amount = document.getElementById('docAmount').value.trim();
+      existing.content = document.getElementById('docContent').value.trim();
+      existing.needPayment = getRadio('needPayment')==='yes';
+      existing.a1Id = line.a1; existing.a2Id = line.a2;
+      existing.draftAtts = [...draftAtts];
+      existing.expenseData = getExpenseData();
+      if(descImageData) existing.descImage = descImageData;
+      existing.status = 'pending1';
+      if(!existing.docNo) existing.docNo = genDocNo(dept);
+      window._editingDocId = null;
+      curDocId = existing.id;
+      saveState(); clearForm();
+      showToast('Submitted · 결재 상신 — ' + existing.docNo);
+      showPage('list');
+      return;
+    }
+  }
+  const doc=buildDoc('pending1');state.docs.push(doc);curDocId=doc.id;saveState();clearForm();showToast('Submitted · 결재 상신 — '+doc.docNo);showPage('list');
+}
+function clearForm(){['docTitle','docAmount','docContent'].forEach(id=>document.getElementById(id).value='');descImageData=null;var dp=document.getElementById('descImagePreview');if(dp)dp.innerHTML='';var dn=document.getElementById('descImageName');if(dn)dn.textContent='';document.getElementById('docCurrency').value='VND';document.querySelector('input[name="needPayment"][value="no"]').checked=true;draftAtts=[];renderDraftAttList();clearExpenseForm();toggleExpenseDetail();}
 function resubmit(id,wrapId){const doc=state.docs.find(d=>d.id===id);if(!doc)return;if(!doc.docNo)doc.docNo=genDocNo(doc.dept);doc.status='pending1';saveState();if(wrapId==='detailWrap')renderList();else renderMineList();showToast('Submitted · 결재 상신 완료');}
 function doApproval(id,step,action,wrapId){
   const doc=state.docs.find(d=>d.id===id);if(!doc)return;
@@ -1255,7 +1964,693 @@ function printPDF(id){
   const total=pdf.getNumberOfPages();for(let p=1;p<=total;p++){pdf.setPage(p);pdf.setFontSize(7);pdf.setFont('helvetica','normal');pdf.setTextColor('#aaa');pdf.text(`INICS Electronic Approval · 전자결재  |  ${p}/${total}`,W/2,292,{align:'center'});pdf.text(`Generated · 출력: ${nowStr()}`,W-mr,292,{align:'right'});}
   pdf.save(`${doc.docNo||'doc'}_${(doc.title||'').replace(/[^a-zA-Z0-9가-힣]/g,'_').substring(0,24)}.pdf`);showToast('PDF saved · PDF 저장 완료');
 }
-</script>
+
+
+
+
+
+
+
+
+function fmtAmountInput(el) {
+  var raw = el.value.replace(/[^0-9.]/g, '');
+  var parts = raw.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  el.value = parts.join('.');
+}
+
+function editDoc(id, wrapId) {
+  var doc = state.docs.find(function(d){ return d.id === id; });
+  if(!doc) return;
+
+  // Get user
+  var uid = mineUserId || newAuthId || parseInt(sessionStorage.getItem('inics_uid')||'0');
+  var gu = MEMBERS.find(function(m){ return m.id === uid; }) || window._gateUser;
+  if(!gu){ showToast('로그인 필요'); return; }
+
+  // Set editing flag BEFORE switching page
+  window._editingDocId = id;
+  newAuthId = gu.id;
+
+  // Switch to new page manually (avoid auto-form-reset in showPage)
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.getElementById('page-new').classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+  document.getElementById('pageTitle').textContent = 'Edit · 수정 중';
+
+  // Show form
+  document.getElementById('newAuthWrap').style.display = 'none';
+  document.getElementById('newFormWrap').style.display = 'block';
+  document.getElementById('newAuthLabel').textContent = '[수정 모드] ' + gu.name + ' (' + gu.role + ')';
+
+  // Show session chip
+  var chip = document.getElementById('sessionChip');
+  if(chip){ chip.style.display='flex'; document.getElementById('sessionName').textContent=gu.name; }
+  var av = document.getElementById('sessionAvatarChip');
+  if(av) av.innerHTML = getAvatar(gu.id,'sm');
+
+  // Populate dept/type selects first
+  populateDeptTypeSelects();
+
+  // Fill all fields
+  var deptEl = document.getElementById('docDept');
+  if(deptEl){ deptEl.value = doc.dept; onDeptChange(); }
+
+  var typeEl = document.getElementById('docType');
+  if(typeEl){ typeEl.value = doc.type; toggleExpenseDetail(); }
+
+  var titleEl = document.getElementById('docTitle');
+  var amtEl = document.getElementById('docAmount');
+  var curEl = document.getElementById('docCurrency');
+  var contentEl = document.getElementById('docContent');
+  if(titleEl) titleEl.value = doc.title || '';
+  if(amtEl) amtEl.value = doc.amount || '';
+  if(curEl) curEl.value = doc.currency || 'VND';
+  if(contentEl) contentEl.value = doc.content || '';
+
+  // Payment radio
+  var payYes = document.querySelector('input[name="needPayment"][value="yes"]');
+  var payNo = document.querySelector('input[name="needPayment"][value="no"]');
+  if(doc.needPayment && payYes) payYes.checked = true;
+  else if(payNo) payNo.checked = true;
+
+  // Attachments
+  draftAtts = doc.draftAtts ? doc.draftAtts.slice() : [];
+  renderDraftAttList();
+
+  // Desc image
+  if(doc.descImage){
+    descImageData = doc.descImage;
+    var dp = document.getElementById('descImagePreview');
+    if(dp) dp.innerHTML = '<img src="'+doc.descImage+'" style="max-width:100%;max-height:200px;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">';
+  }
+
+  // Expense data
+  if(doc.expenseData){
+    var e = doc.expenseData;
+    vendorReqName = null;
+    if(typeof setVendorBankLock==='function') setVendorBankLock(false);
+    if(typeof showVendorActions==='function') showVendorActions({});
+    function sv(eid, val){ var el=document.getElementById(eid); if(el) el.value=val||''; }
+    sv('expVendorName', e.vendorName);
+    sv('expVendorReg', e.vendorReg);
+    sv('expPO', e.poNumber);
+    sv('expInvoice', e.invoiceNumber);
+    sv('expPayDate', e.payDate);
+    sv('expPurpose', e.purpose);
+    sv('expVendorReason', e.vendorReason);
+    sv('expRemarks', e.remarks);
+
+    var bankType = e.bankType || 'vn';
+    var bankRadio = document.querySelector('input[name="bankType"][value="'+bankType+'"]');
+    if(bankRadio){ bankRadio.checked = true; toggleBankType(); }
+
+    if(bankType === 'vn'){
+      var bankSel = document.getElementById('expBankVN');
+      if(bankSel) bankSel.value = e.bankVN || '';
+      sv('expBankVNAcct', e.bankVNAcct);
+      sv('expBankVNHolder', e.bankVNHolder);
+      sv('expBankVNBranch', e.bankVNBranch);
+    } else {
+      sv('expBankForeignName', e.bankForeignName);
+      sv('expBankSwift', e.bankSwift);
+      sv('expBankForeignAcct', e.bankForeignAcct);
+      sv('expBankForeignHolder', e.bankForeignHolder);
+      sv('expBankForeignAddr', e.bankForeignAddr);
+    }
+  }
+
+  showToast('수정 모드 · 내용을 수정 후 결재 상신하세요');
+}
+
+
+function recallDoc(id, wrapId) {
+  if(!confirm('회수하면 초안으로 돌아갑니다. 계속하시겠습니까?\nRecall document to draft?')) return;
+  var doc = state.docs.find(function(d){ return d.id === id; });
+  if(!doc) return;
+  doc.status = 'draft';
+  doc.comments = doc.comments || [];
+  doc.comments.push({who: gm(doc.drafterId)?.name||'', role:'Drafter · 기안자', text:'기안자 회수 · Recalled by drafter', time:nowStr()});
+  saveState();
+  if(wrapId==='detailWrap'){curDocId=id;renderList();}else{mineDocId=id;renderMineList();}
+  showToast('Recalled · 회수 완료 — 수정 후 재상신하세요');
+}
+
+function adminDeleteDoc(id, wrapId) {
+  if(!confirm('관리자 권한으로 삭제하시겠습니까?\nDelete this document as admin?')) return;
+  state.docs = state.docs.filter(d => d.id !== id);
+  saveState();
+  curDocId = null; mineDocId = null;
+  document.getElementById('detailWrap').innerHTML = '';
+  if(document.getElementById('mineDetailWrap')) document.getElementById('mineDetailWrap').innerHTML = '';
+  renderList(); renderMineList(); renderDashboard();
+  showToast('Document deleted by admin · 관리자 삭제 완료');
+}
+
+
+// ═══════════════════════════════════════════
+// VENDOR DB
+// ═══════════════════════════════════════════
+function renderVendorDB() {
+  var el = document.getElementById('vendorDBList');
+  if(!el) return;
+  var q = (document.getElementById('vendorSearch')||{}).value || '';
+  q = q.toLowerCase().trim();
+
+  // Collect unique vendors from all docs with expense data
+  var vendors = {};
+  state.docs.forEach(function(doc){
+    if(!doc.expenseData || !doc.expenseData.vendorName) return;
+    var e = doc.expenseData;
+    var key = e.vendorName.trim();
+    if(!key) return;
+    if(!vendors[key]) vendors[key] = {name:key, reg:e.vendorReg||'', bank:{}, docs:[]};
+    // Update bank info (latest wins)
+    vendors[key].bank = {
+      type: e.bankType,
+      bankVN: e.bankVN||'', acctVN: e.bankVNAcct||'', holderVN: e.bankVNHolder||'', branchVN: e.bankVNBranch||'',
+      bankForeign: e.bankForeignName||'', swift: e.bankSwift||'', acctForeign: e.bankForeignAcct||'', holderForeign: e.bankForeignHolder||''
+    };
+    vendors[key].docs.push({no:doc.docNo, title:doc.title, po:e.poNumber||'', inv:e.invoiceNumber||''});
+  });
+
+  // Overlay vendor master (authoritative bank info; includes vendors with no docs yet)
+  (state.vendors||[]).forEach(function(m){
+    if(!m || !m.name) return;
+    var key = m.name.trim();
+    if(!vendors[key]) vendors[key] = {name:key, reg:m.reg||'', bank:{}, docs:[]};
+    vendors[key].reg = m.reg || vendors[key].reg;
+    vendors[key].bank = {
+      type: m.bankType||'vn',
+      bankVN: m.bankVN||'', acctVN: m.bankVNAcct||'', holderVN: m.bankVNHolder||'', branchVN: m.bankVNBranch||'',
+      bankForeign: m.bankForeignName||'', swift: m.bankSwift||'', acctForeign: m.bankForeignAcct||'', holderForeign: m.bankForeignHolder||''
+    };
+  });
+
+  var list = Object.values(vendors);
+  if(q) list = list.filter(function(v){
+    return v.name.toLowerCase().includes(q) || v.reg.toLowerCase().includes(q) ||
+      v.bank.bankVN.toLowerCase().includes(q) || v.bank.bankForeign.toLowerCase().includes(q) ||
+      v.docs.some(function(d){ return d.no.toLowerCase().includes(q) || d.inv.toLowerCase().includes(q) || d.po.toLowerCase().includes(q); });
+  });
+
+  if(!list.length){
+    el.innerHTML = '<div class="empty-state"><i class="ti ti-building-store"></i><p>No vendors · 거래처 없음</p></div>';
+    return;
+  }
+
+  el.innerHTML = list.map(function(v){
+    var bankInfo = v.bank.type === 'vn'
+      ? (v.bank.bankVN||'—') + ' | ' + (v.bank.acctVN||'—') + ' | ' + (v.bank.holderVN||'—') + (v.bank.branchVN?' ('+v.bank.branchVN+')':'')
+      : (v.bank.bankForeign||'—') + ' | SWIFT: ' + (v.bank.swift||'—') + ' | ' + (v.bank.acctForeign||'—') + ' | ' + (v.bank.holderForeign||'—');
+    var bankLabel = v.bank.type === 'vn' ? 'Vietnam · 베트남' : 'Foreign · 해외';
+    var docLinks = v.docs.map(function(d){ return '<span class="docno">'+d.no+'</span> '+d.title+(d.inv?' [INV:'+d.inv+']':'')+(d.po?' [PO:'+d.po+']':''); }).join('<br>');
+    return '<div class="detail-panel" style="margin-bottom:10px">'
+      +'<div class="detail-hdr"><div style="flex:1"><div class="detail-title">'+v.name+'</div>'
+      +'<div class="detail-badges"><span class="badge b-draft">'+bankLabel+'</span>'+(v.reg?'<span class="docno" style="margin-left:6px">'+v.reg+'</span>':'')+'</div></div></div>'
+      +'<div class="detail-body">'
+      +'<div class="info-grid">'
+      +'<div class="ifield"><div class="lbl">Bank Info · 은행정보</div><div class="val" style="font-size:12px">'+bankInfo+'</div></div>'
+      +'<div class="ifield"><div class="lbl">Related Docs · 관련 문서</div><div class="val" style="font-size:12px;line-height:1.8">'+docLinks+'</div></div>'
+      +'</div></div></div>';
+  }).join('');
+}
+
+
+// ═══════════════════════════════════════════
+// VENDOR MASTER + AUTOCOMPLETE (draft form)
+// ═══════════════════════════════════════════
+// Bank fields that are LOCKED (admin-managed) once a vendor is selected.
+var VENDOR_LOCK_FIELDS = ['expVendorReg','expBankVNAcct','expBankVNHolder','expBankVNBranch',
+  'expBankForeignName','expBankSwift','expBankForeignAcct','expBankForeignHolder','expBankForeignAddr'];
+var vendorReqName = null; // vendor name currently in change-request edit mode
+
+function vendorRecordFromFields(name){
+  var bankType = (document.querySelector('input[name="bankType"]:checked')||{}).value || 'vn';
+  function val(id){ var el=document.getElementById(id); return el ? el.value.trim() : ''; }
+  return {
+    name: (name||val('expVendorName')).trim(),
+    reg: val('expVendorReg'),
+    bankType: bankType,
+    bankVN: bankType==='vn' ? ((document.getElementById('expBankVN')||{}).value||'') : '',
+    bankVNAcct: bankType==='vn' ? val('expBankVNAcct') : '',
+    bankVNHolder: bankType==='vn' ? val('expBankVNHolder') : '',
+    bankVNBranch: bankType==='vn' ? val('expBankVNBranch') : '',
+    bankForeignName: bankType==='foreign' ? val('expBankForeignName') : '',
+    bankSwift: bankType==='foreign' ? val('expBankSwift') : '',
+    bankForeignAcct: bankType==='foreign' ? val('expBankForeignAcct') : '',
+    bankForeignHolder: bankType==='foreign' ? val('expBankForeignHolder') : '',
+    bankForeignAddr: bankType==='foreign' ? val('expBankForeignAddr') : ''
+  };
+}
+
+// Doc-derived vendors (legacy / backward-compatible source)
+function buildVendorIndex() {
+  var idx = {};
+  (state.docs || []).forEach(function(doc){
+    if(!doc.expenseData || !doc.expenseData.vendorName) return;
+    var e = doc.expenseData;
+    var key = e.vendorName.trim();
+    if(!key) return;
+    idx[key.toLowerCase()] = {
+      name: key, reg: e.vendorReg || '', bankType: e.bankType || 'vn',
+      bankVN: e.bankVN || '', bankVNAcct: e.bankVNAcct || '',
+      bankVNHolder: e.bankVNHolder || '', bankVNBranch: e.bankVNBranch || '',
+      bankForeignName: e.bankForeignName || '', bankSwift: e.bankSwift || '',
+      bankForeignAcct: e.bankForeignAcct || '', bankForeignHolder: e.bankForeignHolder || '',
+      bankForeignAddr: e.bankForeignAddr || '', source:'doc'
+    };
+  });
+  return idx;
+}
+
+// Merged view: doc-derived first, then vendor master overlays (master is authoritative)
+function getAllVendors() {
+  var idx = buildVendorIndex();
+  (state.vendors || []).forEach(function(v){
+    if(!v || !v.name) return;
+    idx[v.name.trim().toLowerCase()] = Object.assign({}, v, {source:'master'});
+  });
+  return idx;
+}
+
+// Lock / unlock the admin-managed bank & reg fields
+function setVendorBankLock(locked){
+  VENDOR_LOCK_FIELDS.forEach(function(id){
+    var el = document.getElementById(id); if(!el) return;
+    el.readOnly = locked;
+    el.style.background = locked ? 'var(--surface-2)' : '';
+    el.style.color = locked ? 'var(--text-2)' : '';
+    el.style.cursor = locked ? 'not-allowed' : '';
+  });
+  var sel = document.getElementById('expBankVN');
+  if(sel){ sel.disabled = locked; sel.style.background = locked ? 'var(--surface-2)' : ''; sel.style.color = locked ? 'var(--text-2)' : ''; }
+  document.querySelectorAll('input[name="bankType"]').forEach(function(r){ r.disabled = locked; });
+}
+
+// Kept for compatibility with existing callers (showPage/toggleExpenseDetail).
+// Custom autocomplete builds its list live, so this just clears any stale dropdown.
+function populateVendorDatalist() {
+  hideVendorSuggest();
+}
+
+// Normalize for fuzzy comparison: lowercase, strip spaces/punctuation (keeps Korean/letters/digits)
+function vendorNorm(s){ return (s||'').toLowerCase().replace(/[\s.,_\-()/&]+/g,''); }
+
+// Subsequence test: do all chars of q appear in order within t? (typo/abbrev tolerant)
+function isSubseq(q, t){
+  var i=0; for(var j=0;j<t.length && i<q.length;j++){ if(t[j]===q[i]) i++; } return i===q.length;
+}
+
+// Score a vendor name against the query. Higher = better. 0 = no match.
+function vendorScore(query, name){
+  var q = vendorNorm(query), n = vendorNorm(name);
+  if(!q) return 1; // empty query → show all (low base score)
+  if(n === q) return 100;
+  if(n.startsWith(q)) return 90;
+  if(n.includes(q)) return 80;          // name contains query
+  if(q.includes(n)) return 70;          // query contains name (e.g. ISIRIUS ⊃ SIRIUS)
+  if(isSubseq(q, n)) return 55;         // query is subsequence of name
+  if(isSubseq(n, q)) return 50;         // name is subsequence of query (extra typed chars)
+  // light overlap: share a 3+ char chunk
+  if(q.length>=3){ for(var i=0;i+3<=q.length;i++){ if(n.includes(q.substr(i,3))) return 40; } }
+  return 0;
+}
+
+function hideVendorSuggest(){
+  var box = document.getElementById('vendorSuggest');
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+}
+
+// Build & render the fuzzy suggestion dropdown as the user types
+function onVendorInput(value){
+  var box = document.getElementById('vendorSuggest');
+  if(!box) return;
+  var all = getAllVendors();
+  var matches = Object.keys(all).map(function(k){ return all[k]; })
+    .map(function(v){ return {v:v, s:vendorScore(value, v.name)}; })
+    .filter(function(x){ return x.s > 0; })
+    .sort(function(a,b){ return b.s - a.s || a.v.name.localeCompare(b.v.name); })
+    .slice(0, 10);
+  if(!matches.length){
+    hideVendorSuggest();
+    return;
+  }
+  box.innerHTML = matches.map(function(x){
+    var v = x.v;
+    var tag = v.source==='master' ? '<span style="font-size:9px;background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:10px;margin-left:6px">등록</span>' : '';
+    var sub = [v.reg, (v.bankType==='vn'?(v.bankVN||''):(v.bankForeignName||''))].filter(Boolean).join(' · ');
+    var nm = v.name.replace(/"/g,'&quot;');
+    return '<div class="vendor-sug-item" onmousedown="event.preventDefault()" onclick="pickVendorSuggest(this.getAttribute(\'data-n\'))" data-n="'+nm+'"'
+      + ' style="padding:8px 11px;cursor:pointer;border-bottom:1px solid var(--border)" '
+      + 'onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'\'">'
+      + '<div style="font-size:13px;font-weight:600">'+v.name+tag+'</div>'
+      + (sub?'<div style="font-size:10px;color:var(--text-3);margin-top:1px">'+sub+'</div>':'')
+      + '</div>';
+  }).join('');
+  box.style.display='block';
+}
+
+function pickVendorSuggest(name){
+  var inp = document.getElementById('expVendorName');
+  if(inp) inp.value = name;
+  hideVendorSuggest();
+  onVendorPick(name);
+}
+
+// Enter selects top suggestion; Escape closes
+function onVendorKeydown(e){
+  if(e.key==='Escape'){ hideVendorSuggest(); return; }
+  if(e.key==='Enter'){
+    var first = document.querySelector('#vendorSuggest .vendor-sug-item');
+    if(first){ e.preventDefault(); pickVendorSuggest(first.getAttribute('data-n')); }
+  }
+}
+
+function fillVendorFields(v){
+  function sv(id, val){ var el=document.getElementById(id); if(el) el.value = val||''; }
+  sv('expVendorName', v.name);
+  sv('expVendorReg', v.reg);
+  var bankRadio = document.querySelector('input[name="bankType"][value="'+(v.bankType||'vn')+'"]');
+  if(bankRadio){ bankRadio.checked = true; toggleBankType(); }
+  if((v.bankType||'vn') === 'vn'){
+    var sel = document.getElementById('expBankVN'); if(sel) sel.value = v.bankVN || '';
+    sv('expBankVNAcct', v.bankVNAcct); sv('expBankVNHolder', v.bankVNHolder); sv('expBankVNBranch', v.bankVNBranch);
+  } else {
+    sv('expBankForeignName', v.bankForeignName); sv('expBankSwift', v.bankSwift);
+    sv('expBankForeignAcct', v.bankForeignAcct); sv('expBankForeignHolder', v.bankForeignHolder); sv('expBankForeignAddr', v.bankForeignAddr);
+  }
+}
+
+function showVendorActions(opts){
+  var row = document.getElementById('vendorActionRow');
+  if(row) row.style.display = (opts.add||opts.req||opts.submit) ? 'flex' : 'none';
+  var ids = {vendorAddBtn:!!opts.add, vendorReqBtn:!!opts.req, vendorReqSubmit:!!opts.submit, vendorReqCancel:!!opts.submit};
+  Object.keys(ids).forEach(function(id){ var b=document.getElementById(id); if(b) b.style.display = ids[id] ? 'inline-flex' : 'none'; });
+}
+
+// Vendor name committed → autofill + lock if existing, or offer "Add" if new
+function onVendorPick(name) {
+  var hint = document.getElementById('vendorPickHint');
+  vendorReqName = null;
+  if(!name || !name.trim()){
+    setVendorBankLock(false);
+    showVendorActions({});
+    if(hint){ hint.textContent='기존 거래처 선택 시 사업자번호 · 은행정보 자동입력 · Select existing vendor to auto-fill'; hint.style.color='var(--text-3)'; }
+    return;
+  }
+  var v = getAllVendors()[name.trim().toLowerCase()];
+  if(!v){
+    setVendorBankLock(false); // editable so user can enter info then click Add
+    showVendorActions({add:true});
+    if(hint){ hint.textContent='신규 거래처 · New vendor — 정보 입력 후 [거래처 추가]를 누르세요'; hint.style.color='#b45309'; }
+    return;
+  }
+  fillVendorFields(v);
+  setVendorBankLock(true);
+  showVendorActions({req:true});
+  if(hint){ hint.textContent='🔒 기존 거래처 (관리자 관리) · 자동입력됨 · 변경은 [변경 요청]'; hint.style.color='#15803d'; }
+  if(typeof showToast === 'function') showToast('거래처 자동입력 · '+v.name);
+}
+
+// Add a brand-new vendor to the master store
+function addVendorFromDraft(){
+  var rec = vendorRecordFromFields();
+  if(!rec.name){ showToast('업체명을 입력하세요 · Enter vendor name'); return; }
+  if(getAllVendors()[rec.name.toLowerCase()]){ showToast('이미 등록된 거래처입니다 · Already registered'); return; }
+  var hasBank = rec.bankType==='vn' ? (rec.bankVN || rec.bankVNAcct) : (rec.bankForeignName || rec.bankForeignAcct);
+  if(!hasBank && !confirm('은행정보 없이 거래처만 등록할까요?\nRegister vendor without bank info?')) return;
+  var who = (window._gateUser && window._gateUser.name) || (newAuthId && gm(newAuthId) && gm(newAuthId).name) || 'unknown';
+  rec.createdBy = who; rec.createdAt = nowStr(); rec.updatedAt = nowStr();
+  if(!state.vendors) state.vendors = [];
+  state.vendors.push(rec);
+  saveState();
+  populateVendorDatalist();
+  setVendorBankLock(true);
+  showVendorActions({req:true});
+  var hint = document.getElementById('vendorPickHint');
+  if(hint){ hint.textContent='✓ 거래처 등록 완료 · Vendor added: '+rec.name; hint.style.color='#15803d'; }
+  showToast('거래처 추가 완료 · Vendor added');
+}
+
+// Enter change-request edit mode (unlock fields temporarily)
+function requestVendorChange(){
+  var name = (document.getElementById('expVendorName')||{}).value || '';
+  vendorReqName = name.trim();
+  if(!vendorReqName) return;
+  setVendorBankLock(false);
+  showVendorActions({submit:true});
+  var hint = document.getElementById('vendorPickHint');
+  if(hint){ hint.textContent='✎ 변경할 은행정보를 수정한 뒤 [변경 요청 제출] · Edit then submit for admin approval'; hint.style.color='#b45309'; }
+}
+
+// Submit the diff as a pending request; master stays unchanged until admin approves
+function submitVendorChange(){
+  if(!vendorReqName){ cancelVendorChange(); return; }
+  var master = getAllVendors()[vendorReqName.toLowerCase()] || {};
+  var edited = vendorRecordFromFields(vendorReqName);
+  var fields = ['reg','bankType','bankVN','bankVNAcct','bankVNHolder','bankVNBranch',
+    'bankForeignName','bankSwift','bankForeignAcct','bankForeignHolder','bankForeignAddr'];
+  var changes = {};
+  fields.forEach(function(f){ if((edited[f]||'') !== (master[f]||'')) changes[f] = {from: master[f]||'', to: edited[f]||''}; });
+  if(!Object.keys(changes).length){ showToast('변경 사항이 없습니다 · No changes'); cancelVendorChange(); return; }
+  var who = (window._gateUser && window._gateUser.name) || (newAuthId && gm(newAuthId) && gm(newAuthId).name) || 'unknown';
+  if(!state.vendorRequests) state.vendorRequests = [];
+  state.vendorRequests.push({
+    id: (state.vendorReqSeq = (state.vendorReqSeq||0)+1),
+    vendorName: vendorReqName, requestedBy: who, requestedAt: nowStr(),
+    changes: changes, status:'pending'
+  });
+  saveState();
+  // restore master values in the form (the draft uses approved data, not the pending change)
+  cancelVendorChange();
+  showToast('변경 요청 전송 · 관리자 승인 대기 · Request sent to admin');
+}
+
+function cancelVendorChange(){
+  var name = vendorReqName || (document.getElementById('expVendorName')||{}).value || '';
+  vendorReqName = null;
+  var v = getAllVendors()[name.trim().toLowerCase()];
+  if(v){ fillVendorFields(v); setVendorBankLock(true); showVendorActions({req:true}); }
+  else { setVendorBankLock(false); showVendorActions({}); }
+  var hint = document.getElementById('vendorPickHint');
+  if(hint){ hint.textContent='🔒 기존 거래처 (관리자 관리) · 변경은 [변경 요청]'; hint.style.color='#15803d'; }
+}
+
+// ═══════════════════════════════════════════
+// HUB PAGE
+// ═══════════════════════════════════════════
+function showHub() {
+  var hubPage = document.getElementById('hubPage');
+  if(hubPage) hubPage.style.display = 'block';
+  // Update hub user chip
+  var gu = window._gateUser;
+  if(gu) {
+    var nameEl = document.getElementById('hubUserName');
+    var avEl = document.getElementById('hubAvatarChip');
+    if(nameEl) nameEl.textContent = gu.name;
+    if(avEl) avEl.innerHTML = getAvatar(gu.id, 'sm');
+  }
+  // Show pending count
+  var pending = state.docs.filter(function(d){ return ['pending1','pending2'].includes(d.status); }).length;
+  var badge = document.getElementById('hubApprovalBadge');
+  if(badge && pending > 0) {
+    badge.style.display = 'block';
+    badge.querySelector('span').textContent = pending + ' 건 대기 중';
+  }
+}
+
+function enterModule(module) {
+  var hubPage = document.getElementById('hubPage');
+  if(hubPage) hubPage.style.display = 'none';
+  if(module === 'approval') {
+    showPage('dashboard');
+  } else if(module === 'vendors') {
+    showPage('vendors');
+  }
+}
+
+function hubLogout() {
+  // Full logout
+  sessionStorage.removeItem('inics_gate');
+  sessionStorage.removeItem('inics_uid');
+  window._gateUser = null;
+  newAuthId = null;
+  mineUserId = null;
+  sessionIsAdmin = false;
+  // Show login gate
+  var gate = document.getElementById('loginGate');
+  if(gate) gate.classList.remove('hidden');
+  var hub = document.getElementById('hubPage');
+  if(hub) hub.style.display = 'none';
+  // Reset session chip
+  var chip = document.getElementById('sessionChip');
+  if(chip) chip.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════
+// MOBILE SIDEBAR
+// ═══════════════════════════════════════════
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+function checkMobile() {
+  var btn = document.getElementById('menuBtn');
+  if (btn) btn.style.display = window.innerWidth <= 768 ? '' : 'none';
+  // Close sidebar overlay on nav item click (mobile)
+  if (window.innerWidth <= 768) {
+    document.querySelectorAll('.nav-item').forEach(function(n) {
+      n.addEventListener('click', function() {
+        document.getElementById('sidebar').classList.remove('open');
+      }, {once: false});
+    });
+  }
+}
+
+window.addEventListener('resize', checkMobile);
+document.addEventListener('DOMContentLoaded', checkMobile);
+setTimeout(checkMobile, 100);
+
+// Overlay to close sidebar on mobile
+document.addEventListener('click', function(e) {
+  var sb = document.getElementById('sidebar');
+  var btn = document.getElementById('menuBtn');
+  if (window.innerWidth <= 768 && sb && sb.classList.contains('open')) {
+    if (!sb.contains(e.target) && (!btn || !btn.contains(e.target))) {
+      sb.classList.remove('open');
+    }
+  }
+});
+
+// ═══════════════════════════════════════════
+// AVATAR HELPERS
+// ═══════════════════════════════════════════
+function getAvatar(memberId, size='sm') {
+  var photo = state.memberPhotos && state.memberPhotos[memberId];
+  var m = gm(memberId);
+  var initials = m ? m.name.split(' ').map(function(w){ return w[0]; }).join('').substring(0,2) : '?';
+  var sz = size === 'lg' ? '48px' : '32px';
+  var fs = size === 'lg' ? '16px' : '11px';
+  if (photo) {
+    return '<img src="' + photo + '" style="width:' + sz + ';height:' + sz + ';border-radius:50%;object-fit:cover;border:1.5px solid var(--border);flex-shrink:0" alt="' + (m?m.name:'') + '">';
+  }
+  return '<div style="width:' + sz + ';height:' + sz + ';border-radius:50%;background:var(--surface-2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:' + fs + ';font-weight:600;color:var(--text-3);flex-shrink:0">' + initials + '</div>';
+}
+
+function handlePhotoUpload(memberId, file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { showToast('Photo must be under 2MB · 2MB 이하 사진만 가능'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    if (!state.memberPhotos) state.memberPhotos = {};
+    state.memberPhotos[memberId] = e.target.result;
+    saveState();
+    renderAdmin();
+    showToast('Photo updated · 사진 업데이트 완료');
+  };
+  reader.readAsDataURL(file);
+}
+
+
+function populateDeptTypeSelects() {
+  var depts = state.departments || ['FURNITURE','SOURCING'];
+  var types = state.docTypes || ['지출결의서 · Expense Report','휴가신청서 · Leave Request','업무보고서 · Work Report','기타 · Other'];
+  
+  var deptEl = document.getElementById('docDept');
+  if(deptEl) {
+    var curDept = deptEl.value;
+    deptEl.innerHTML = depts.map(function(d){ return '<option value="'+d+'">'+d+'</option>'; }).join('');
+    if(curDept && depts.includes(curDept)) deptEl.value = curDept;
+  }
+  
+  var typeEl = document.getElementById('docType');
+  if(typeEl) {
+    var curType = typeEl.value;
+    typeEl.innerHTML = types.map(function(t){ return '<option>'+t+'</option>'; }).join('');
+    if(curType && types.includes(curType)) typeEl.value = curType;
+  }
+}
+
+// ═══════════════════════════════════════════
+// EXPENSE DETAIL TOGGLE
+// ═══════════════════════════════════════════
+
+var descImageData = null;
+
+function handleDescImage(e) {
+  var file = e.target.files[0];
+  if(!file) return;
+  if(file.size > 5*1024*1024){ showToast('Image must be under 5MB'); return; }
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    descImageData = ev.target.result;
+    document.getElementById('descImageName').textContent = file.name;
+    document.getElementById('descImagePreview').innerHTML = '<img src="'+ev.target.result+'" style="max-width:100%;max-height:200px;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">';
+  };
+  reader.readAsDataURL(file);
+}
+
+function toggleExpenseDetail() {
+  var type = document.getElementById('docType') ? document.getElementById('docType').value : '';
+  var el = document.getElementById('expenseDetail');
+  if (el) el.style.display = type.includes('지출결의서') ? 'block' : 'none';
+  if (el && el.style.display === 'block') populateVendorDatalist();
+}
+
+function toggleBankType() {
+  var val = document.querySelector('input[name="bankType"]:checked');
+  val = val ? val.value : 'vn';
+  var vn = document.getElementById('bankVN');
+  var foreign = document.getElementById('bankForeign');
+  if (vn) vn.style.display = val === 'vn' ? 'grid' : 'none';
+  if (foreign) foreign.style.display = val === 'foreign' ? 'grid' : 'none';
+}
+
+function getExpenseData() {
+  var type = document.getElementById('docType') ? document.getElementById('docType').value : '';
+  if (!type.includes('지출결의서')) return null;
+  var bankType = document.querySelector('input[name="bankType"]:checked');
+  bankType = bankType ? bankType.value : 'vn';
+  var budget = document.querySelector('input[name="expBudget"]:checked');
+  budget = budget ? budget.value : 'no';
+  function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+  return {
+    vendorName: val('expVendorName'), vendorReg: val('expVendorReg'),
+    bankType: bankType,
+    bankVN: bankType==='vn' ? (document.getElementById('expBankVN') ? document.getElementById('expBankVN').value : '') : '',
+    bankVNAcct: bankType==='vn' ? val('expBankVNAcct') : '',
+    bankVNHolder: bankType==='vn' ? val('expBankVNHolder') : '',
+    bankVNBranch: bankType==='vn' ? val('expBankVNBranch') : '',
+    bankForeignName: bankType==='foreign' ? val('expBankForeignName') : '',
+    bankSwift: bankType==='foreign' ? val('expBankSwift') : '',
+    bankForeignAcct: bankType==='foreign' ? val('expBankForeignAcct') : '',
+    bankForeignHolder: bankType==='foreign' ? val('expBankForeignHolder') : '',
+    bankForeignAddr: bankType==='foreign' ? val('expBankForeignAddr') : '',
+    poNumber: val('expPO'), invoiceNumber: val('expInvoice'),
+    payDate: val('expPayDate'), purpose: val('expPurpose'),
+    vendorReason: val('expVendorReason'), budget: budget, remarks: val('expRemarks')
+  };
+}
+
+function clearExpenseForm() {
+  ['expVendorName','expVendorReg','expBankVNAcct','expBankVNHolder','expBankVNBranch',
+   'expBankForeignName','expBankSwift','expBankForeignAcct','expBankForeignHolder','expBankForeignAddr',
+   'expPO','expInvoice','expPayDate','expPurpose','expVendorReason','expRemarks'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  var vn = document.querySelector('input[name="bankType"][value="vn"]');
+  if (vn) { vn.checked = true; toggleBankType(); }
+  var no = document.querySelector('input[name="expBudget"][value="no"]');
+  if (no) no.checked = true;
+  var bankSel = document.getElementById('expBankVN');
+  if (bankSel) bankSel.selectedIndex = 0;
+  var hint = document.getElementById('vendorPickHint');
+  if (hint) { hint.textContent = '기존 거래처 선택 시 사업자번호 · 은행정보 자동입력 · Select existing vendor to auto-fill'; hint.style.color = 'var(--text-3)'; }
+  vendorReqName = null;
+  if (typeof setVendorBankLock === 'function') setVendorBankLock(false);
+  if (typeof showVendorActions === 'function') showVendorActions({});
+}
 
 // ═══════════════════════════════════════════
 // FIREBASE INIT — single clean entry point
@@ -1276,24 +2671,36 @@ if (window._firebaseReady) {
     loadState();
   }, { once: true });
 
-  // Case 3: Firebase never loads (network block, ad blocker etc)
+  // Case 3: Firebase never loads - shorter timeout
   setTimeout(function() {
     if (!fbReady) {
-      console.warn('Firebase unavailable — using localStorage fallback');
       loadState();
     }
-  }, 10000);
+  }, 5000);
 }
+
+// Extra safety: poll for firebase ready
+var _fbPoll = setInterval(function() {
+  if (window._fbInitDone && !fbReady) {
+    clearInterval(_fbPoll);
+    fbReady = true;
+    loadState();
+  } else if (fbReady) {
+    clearInterval(_fbPoll);
+  }
+}, 200);
+</script>
 
 <script>
 // ═══════════════════════════════════════════
 // LOGIN GATE (global scope)
 // ═══════════════════════════════════════════
 const GATE_USERS = [
-  {id:'JINHA',      pw:'#Seoul1989#',  name:'JINHA LEE',    memberId:1},
-  {id:'HWANSHINYU', pw:'HWAN SHIN YU', name:'HWAN SHIN YU', memberId:2},
-  {id:'HANA',       pw:'HANA',         name:'HANA',         memberId:3},
-  {id:'KMON',       pw:'KMON',         name:'KMON',         memberId:4},
+  {id:'JINHA',      pw:'JINHA',      name:'JINHA LEE',    memberId:1},
+  {id:'HWANSHINYU', pw:'HWANSHINYU', name:'HWAN SHIN YU', memberId:2},
+  {id:'HANA',       pw:'HANA',       name:'HANA',         memberId:3},
+  {id:'KMON',       pw:'KMON',       name:'KMON',         memberId:4},
+  {id:'JACOB',      pw:'JACOB',      name:'JACOB',        memberId:5},
 ];
 
 function gateLogin() {
@@ -1305,8 +2712,10 @@ function gateLogin() {
   document.getElementById('loginGate').classList.add('hidden');
   sessionStorage.setItem('inics_gate', '1');
   sessionStorage.setItem('inics_uid', String(user.memberId));
-  // apply session after main script loads
-  setTimeout(() => applyGateSession(user.memberId), 200);
+  setTimeout(() => {
+    applyGateSession(user.memberId);
+    setTimeout(() => showHub(), 300);
+  }, 200);
 }
 
 function applyGateSession(memberId) {
@@ -1321,7 +2730,12 @@ function applyGateSession(memberId) {
 
   // Session chip in topbar
   const chip = document.getElementById('sessionChip');
-  if (chip) { chip.style.display = 'flex'; document.getElementById('sessionName').textContent = m.name; }
+  if (chip) {
+    chip.style.display = 'flex';
+    document.getElementById('sessionName').textContent = m.name;
+    var avatarChip = document.getElementById('sessionAvatarChip');
+    if (avatarChip) avatarChip.innerHTML = getAvatar(m.id, 'sm');
+  }
   if (m.isAdmin) {
     sessionIsAdmin = true;
     const badge = document.getElementById('sessionAdminBadge');
@@ -1344,9 +2758,16 @@ function showNewForm(m) {
   document.getElementById('newFormWrap').style.display = 'block';
   if (document.getElementById('newAuthLabel'))
     document.getElementById('newAuthLabel').textContent = 'Authenticated · 인증: ' + m.name + ' (' + m.role + ')';
+  if (typeof populateDeptTypeSelects === 'function') populateDeptTypeSelects();
   if (typeof renderDraftAttList === 'function') renderDraftAttList();
   if (typeof onDeptChange === 'function') onDeptChange();
   if (typeof toggleExpenseDetail === 'function') toggleExpenseDetail();
+  // Reset expense detail visibility based on current selection
+  var expEl = document.getElementById('expenseDetail');
+  var typeEl = document.getElementById('docType');
+  if (expEl && typeEl) {
+    expEl.style.display = typeEl.value.includes('지출결의서') ? 'block' : 'none';
+  }
 }
 
 function toggleBankType() {
@@ -1360,9 +2781,13 @@ function toggleBankType() {
 // Auto-login if session exists
 (function checkSession() {
   if (sessionStorage.getItem('inics_gate') === '1') {
-    const uid = parseInt(sessionStorage.getItem('inics_uid') || '0');
+    var uid = parseInt(sessionStorage.getItem('inics_uid') || '0');
     document.getElementById('loginGate').classList.add('hidden');
-    if (uid) setTimeout(() => applyGateSession(uid), 600);
+    if (uid) {
+      applyGateSession(uid);
+      setTimeout(function(){ applyGateSession(uid); }, 300);
+      setTimeout(function(){ applyGateSession(uid); showHub(); }, 800);
+    }
   }
 })();
 </script>
